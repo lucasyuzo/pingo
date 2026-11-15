@@ -2,7 +2,7 @@
 
 # 🐾 pingo
 
-**Your faithful companion to jump between local repositories.**
+**Your faithful companion to find local repositories.**
 
 Pure shell · zero dependencies · zsh & bash · macOS, Linux and Windows (Git Bash)
 
@@ -181,10 +181,16 @@ CI runs the suite on Linux, macOS and Windows (Git Bash) on every push.
 
 Pingo is the name of my dog. 🐕
 
-In Homer's *Odyssey*, after twenty years away, Odysseus returns to Ithaca
-disguised as a beggar. Nobody recognizes him — except **Argos**, his old dog,
-who knows him at once. Like Argos, pingo always remembers the way back home,
-to every one of your repositories.
+Pingo is a cocker spaniel, and cocker spaniels were born with a nose that
+should honestly be illegal. Drop a crumb in the kitchen and he finds it before
+it lands. Hide a treat at the back of the closet and he's already sitting in
+front of the door, staring at you.
+
+This tool works the same way, minus the drool: tell it where you want to go and
+it sniffs the repository out for you. No `cd ../../../where/was/it/again`. No
+digging through folders. Just `pingo`, Enter, and you're there.
+
+Good boy. 🦴
 
 ## License
 

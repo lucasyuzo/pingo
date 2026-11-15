@@ -2,7 +2,7 @@
 
 # 🐾 pingo
 
-**Seu companheiro fiel para pular entre repositórios locais.**
+**Seu companheiro fiel para encontrar repositórios locais.**
 
 Shell puro · zero dependências · zsh e bash · macOS, Linux e Windows (Git Bash)
 
@@ -182,10 +182,17 @@ O CI roda a suíte no Linux, macOS e Windows (Git Bash) a cada push.
 
 Pingo é o nome do meu cachorro. 🐕
 
-Na *Odisseia* de Homero, depois de vinte anos longe, Ulisses volta a Ítaca
-disfarçado de mendigo. Ninguém o reconhece — exceto **Argos**, seu velho cão,
-que o reconhece na hora. Como Argos, o pingo sempre lembra o caminho de volta
-para casa, para cada um dos seus repositórios.
+O Pingo é um cocker spaniel, e cocker spaniel já nasce com um faro que
+deveria ser proibido por lei. Caiu uma migalha na cozinha? Ele acha antes de
+ela chegar no chão. Escondeu um petisco no fundo do armário? Ele já está
+sentado na frente da porta, te encarando.
+
+Esta ferramenta funciona do mesmo jeito, só que sem a baba: diga para onde
+quer ir e ela fareja o repositório para você. Nada de
+`cd ../../../onde/era/mesmo`. Nada de ficar cavando pastas. É só `pingo`,
+Enter, e pronto.
+
+Bom garoto. 🦴
 
 ## Licença
 
