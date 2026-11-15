@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/pingo.png" alt="Pingo, um cocker spaniel, lambendo o focinho" width="160">
+
 # 🐾 pingo
 
 **Seu companheiro fiel para encontrar repositórios locais.**

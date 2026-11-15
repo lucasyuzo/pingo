@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/pingo.png" alt="Pingo, a cocker spaniel, licking his nose" width="160">
+
 # 🐾 pingo
 
 **Your faithful companion to find local repositories.**
