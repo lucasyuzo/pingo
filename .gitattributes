@@ -1,0 +1,6 @@
+# Shell scripts MUST keep LF line endings, even when cloned on Windows
+# (core.autocrlf=true would otherwise break them in Git Bash).
+* text=auto eol=lf
+*.sh text eol=lf
+*.bash text eol=lf
+*.zsh text eol=lf

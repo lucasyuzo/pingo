@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash # Git Bash on Windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zsh (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q zsh
+
+      - name: Shell versions
+        run: |
+          bash --version | head -n 1
+          if command -v zsh >/dev/null; then zsh --version; fi
+          if [ -x /bin/bash ]; then /bin/bash --version | head -n 1; fi
+
+      - name: Check line endings are LF
+        run: |
+          if grep -rlI $'\r' --include='*.sh' --include='*.bash' --include='*.zsh' .; then
+            echo "Found CRLF line endings"; exit 1
+          fi
+
+      - name: Run tests
+        run: tests/run.sh
