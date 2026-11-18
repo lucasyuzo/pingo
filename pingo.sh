@@ -1596,7 +1596,7 @@ _pingo_menu_pull() {
 }
 
 # P: Pull every Repository outside the alternate screen, with the same output
-# as `pingo pull`, then wait for Enter and come back to the menu.
+# as `pingo pull`, then wait for Enter (or q/Esc) and come back to the menu.
 _pingo_menu_pull_all() {
   _pingo_menu_need_git || return 0
   _pingo_tui_leave
@@ -1606,8 +1606,10 @@ _pingo_menu_pull_all() {
   printf '\n  %s%s%s\n' "${_C_D}" "$_PINGO_M" "${_C_R}"
   while :; do
     _pingo_readkey || return 1
-    [ "$_PINGO_KEY" = enter ] && break
-    [ "$_PINGO_KEY" = quit ] && return 1
+    case "$_PINGO_KEY:$_PINGO_C" in
+      enter:* | esc:* | char:q | char:Q) break ;;
+      quit:*) return 1 ;;
+    esac
   done
   _pingo_tui_enter
   return 0

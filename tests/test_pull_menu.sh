@@ -56,6 +56,16 @@ assert_contains "$(out)" "Press Enter to go back to the menu." "P waits for Ente
 assert_eq "$PWD" "$T_TMP/work/web" "after P Enter returns to the menu"
 cd "$T_TMP" || exit 1
 
+# --- P: q and Esc also return to the menu (they don't quit it) ---
+menu "P" "q" "$DOWN" "
+"
+assert_eq "$PWD" "$T_TMP/work/web" "after P, q returns to the menu"
+cd "$T_TMP" || exit 1
+menu "P" "$(printf '\033')" "x" "$DOWN" "
+"
+assert_eq "$PWD" "$T_TMP/work/web" "after P, Esc returns to the menu"
+cd "$T_TMP" || exit 1
+
 # --- without git: both keys report "git not found" instead of pulling ---
 t_git_advance "$T_TMP/work/api" 1
 before=$(t_git_rev "$T_TMP/work/api" main)
