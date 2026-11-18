@@ -1120,10 +1120,8 @@ _pingo_pull_all() {
   fi
   while [ "$i" -le "$_PINGO_N" ]; do
     _pingo_get "$i"
-    _PINGO_PULL_REASON=
     _pingo_pull_one "$_PINGO_P"
     _pingo_pull_report "$_PINGO_NAME"
-    reason=${_PINGO_PULL_REASON:-}
     key=
     case "$_PINGO_PULL_RES" in
       updated) up=$((up + 1)) ;;
@@ -1132,11 +1130,9 @@ _pingo_pull_all() {
       *) fl=$((fl + 1)); key=PULL_SUMMARY_FAILED ;;
     esac
     if [ -n "$key" ]; then
-      if [ -n "$reason" ]; then
-        _pingo_fmt "$key" "$_PINGO_NAME" "$reason"
-      else
-        _pingo_fmt "${key}_BARE" "$_PINGO_NAME"
-      fi
+      _pingo_pull_why
+      reason=$_PINGO_M
+      _pingo_fmt "$key" "$_PINGO_NAME" "$reason"
       case "$key" in
         *SKIPPED) notes="$notes  ${_C_YEL}!${_C_R} $_PINGO_M$_PINGO_NL" ;;
         *) notes="$notes  ${_C_RED}✗${_C_R} $_PINGO_M$_PINGO_NL" ;;
@@ -1569,9 +1565,9 @@ _pingo_menu_pull() {
   _pingo_fmt PULLING "$name"
   msg="${_C_CYN}•${_C_R} $_PINGO_M"
   _pingo_draw
-  _PINGO_PULL_REASON=
   _pingo_pull_one "$dir"
-  reason=${_PINGO_PULL_REASON:-}
+  _pingo_pull_why
+  reason=$_PINGO_M
   case "$_PINGO_PULL_RES" in
     updated)
       if [ "$_PINGO_PULL_COUNT" = 1 ]; then
@@ -1586,19 +1582,11 @@ _pingo_menu_pull() {
       msg="${_C_GRN}✓${_C_R} $_PINGO_M"
       ;;
     skipped)
-      if [ -n "$reason" ]; then
-        _pingo_fmt PULL_SUMMARY_SKIPPED "$name" "$reason"
-      else
-        _pingo_fmt PULL_SUMMARY_SKIPPED_BARE "$name"
-      fi
+      _pingo_fmt PULL_SKIPPED "$name" "$reason"
       msg="${_C_YEL}!${_C_R} $_PINGO_M"
       ;;
     *)
-      if [ -n "$reason" ]; then
-        _pingo_fmt PULL_SUMMARY_FAILED "$name" "$reason"
-      else
-        _pingo_fmt PULL_FAILED "$name"
-      fi
+      _pingo_fmt PULL_FAILED "$name" "$reason"
       msg="${_C_RED}✗${_C_R} $_PINGO_M"
       ;;
   esac

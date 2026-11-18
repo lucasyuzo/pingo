@@ -73,9 +73,7 @@ PINGO_MSG_PULL_WHY_ERROR='erro do git'
 # --- pull: todos os repositórios -------------------------------------------------
 PINGO_MSG_PULL_SUMMARY='Resumo: %s atualizados, %s já em dia, %s ignorados, %s falharam'
 PINGO_MSG_PULL_SUMMARY_SKIPPED='%s: ignorado (%s)'
-PINGO_MSG_PULL_SUMMARY_SKIPPED_BARE='%s: ignorado'
 PINGO_MSG_PULL_SUMMARY_FAILED='%s: falhou (%s)'
-PINGO_MSG_PULL_SUMMARY_FAILED_BARE='%s: falhou'
 PINGO_MSG_PULLING='fazendo o pull de %s…'
 
 # --- ajuda ---------------------------------------------------------------------------

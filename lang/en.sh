@@ -78,9 +78,7 @@ PINGO_MSG_PULL_WHY_ERROR='git error'
 # --- pull: every repository -----------------------------------------------------
 PINGO_MSG_PULL_SUMMARY='Summary: %s updated, %s already up to date, %s skipped, %s failed'
 PINGO_MSG_PULL_SUMMARY_SKIPPED='%s: skipped (%s)'
-PINGO_MSG_PULL_SUMMARY_SKIPPED_BARE='%s: skipped'
 PINGO_MSG_PULL_SUMMARY_FAILED='%s: failed (%s)'
-PINGO_MSG_PULL_SUMMARY_FAILED_BARE='%s: failed'
 PINGO_MSG_PULLING='pulling %s…'
 
 # --- help ------------------------------------------------------------------------
