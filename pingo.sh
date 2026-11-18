@@ -962,19 +962,50 @@ _pingo_cmd_update() {
 
 # git in the Repository being pulled, never prompting for credentials.
 _pingo_pull_git() {
-  GIT_TERMINAL_PROMPT=0 git -C "$_PINGO_PULL_DIR" "$@"
+  # No askpass either (IDEs set GIT_ASKPASS): credential prompts fail instead of
+  # stalling; SSH agent keys still work. LC_ALL=C: failures are classified by
+  # git's untranslated messages.
+  LC_ALL=C GIT_TERMINAL_PROMPT=0 GIT_ASKPASS= SSH_ASKPASS= \
+    git -C "$_PINGO_PULL_DIR" -c core.askPass= "$@"
+}
+
+# Ends the Pull with a result and reason (see _pingo_pull_one); returns 1.
+_pingo_pull_skip() { _PINGO_PULL_RES=skipped _PINGO_PULL_REASON=$1; return 1; }
+_pingo_pull_fail() { _PINGO_PULL_RES=failed _PINGO_PULL_REASON=$1; return 1; }
+
+# Fails the Pull with a reason classified from git's <stderr> (always in English).
+_pingo_pull_failed() {
+  case "$1" in
+    *"non-fast-forward"* | *"Not possible to fast-forward"* | *"fast-forwarded"*) _pingo_pull_fail DIVERGED ;;
+    *"terminal prompts disabled"* | *"could not read Username"* | *"could not read Password"* | \
+      *"Authentication failed"* | *"Permission denied"*)
+      _pingo_pull_fail AUTH ;;
+    *"Could not read from remote"* | *"does not appear to be a git repository"* | \
+      *"unable to access"* | *"Could not resolve"* | *"Failed to connect"* | \
+      *"Connection refused"* | *"timed out"* | *"Network is unreachable"*)
+      _pingo_pull_fail UNREACHABLE ;;
+    *) _pingo_pull_fail ERROR ;;
+  esac
 }
 
 # Pull core: brings the Default branch of the Repository at <dir> up to date.
-#   _PINGO_PULL_RES     updated | current | failed
+#   _PINGO_PULL_RES     updated | current | skipped | failed
+#   _PINGO_PULL_REASON  why it was skipped or failed: a PULL_WHY_<REASON>
+#                       message key suffix (translate with _pingo_pull_why)
 #   _PINGO_PULL_BRANCH  Default branch name
 #   _PINGO_PULL_COUNT   commits received (updated)
 #   _PINGO_PULL_OLD/NEW short hashes before/after (updated)
-# Returns 0 for updated/current, 1 otherwise.
+# Prints nothing. Returns 0 for updated/current, 1 otherwise.
 _pingo_pull_one() {
-  local db= remote= head= old= new= ref=
-  _PINGO_PULL_DIR=$1 _PINGO_PULL_RES=failed _PINGO_PULL_BRANCH=
+  local db= remote= head= old= new= ref= f=
+  _PINGO_PULL_DIR=$1 _PINGO_PULL_RES=failed _PINGO_PULL_REASON=ERROR _PINGO_PULL_BRANCH=
   _PINGO_PULL_COUNT=0 _PINGO_PULL_OLD= _PINGO_PULL_NEW=
+
+  # Pre-checks: anything that can't be pulled safely is skipped, untouched.
+  [ -d "$1" ] || { _pingo_pull_skip MISSING; return; }
+  # Its own .git, so a plain folder inside another Repository is not mistaken for it.
+  [ -e "$1/.git" ] && _pingo_pull_git rev-parse -q --git-dir >/dev/null 2>&1 ||
+    { _pingo_pull_skip NOT_GIT; return; }
 
   # Default branch: the remote's declared HEAD, else main, else master.
   ref=$(_pingo_pull_git symbolic-ref -q refs/remotes/origin/HEAD 2>/dev/null)
@@ -985,21 +1016,48 @@ _pingo_pull_one() {
   elif _pingo_pull_git show-ref -q --verify refs/heads/master 2>/dev/null; then
     db=master
   else
-    return 1
+    _pingo_pull_skip NO_BRANCH
+    return
   fi
   _PINGO_PULL_BRANCH=$db
 
   # Remote: the Default branch's upstream, else origin.
   remote=$(_pingo_pull_git config --get "branch.$db.remote" 2>/dev/null)
-  [ -n "$remote" ] || remote=origin
+  _pingo_pull_git config --get "remote.$remote.url" >/dev/null 2>&1 || remote=origin
+  _pingo_pull_git config --get "remote.$remote.url" >/dev/null 2>&1 ||
+    { _pingo_pull_skip NO_REMOTE; return; }
+
+  head=$(_pingo_pull_git symbolic-ref -q HEAD 2>/dev/null)
+  # A rebase detaches HEAD; the branch being rebased is recorded in head-name.
+  for f in rebase-merge rebase-apply; do
+    f=$(_pingo_pull_git rev-parse --git-path "$f/head-name" 2>/dev/null)
+    case "$f" in /* | [A-Za-z]:*) ;; *) f=$1/$f ;; esac
+    [ -f "$f" ] && [ "$(cat "$f")" = "refs/heads/$db" ] &&
+      { _pingo_pull_skip REBASING; return; }
+  done
+  if [ "$head" != "refs/heads/$db" ]; then
+    # Not checked out here: git won't move a branch checked out elsewhere.
+    case "$_PINGO_NL$(_pingo_pull_git worktree list --porcelain 2>/dev/null)$_PINGO_NL" in
+      *"${_PINGO_NL}branch refs/heads/$db$_PINGO_NL"*) _pingo_pull_skip WORKTREE; return ;;
+    esac
+  else
+    _pingo_pull_git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 &&
+      { _pingo_pull_skip MERGING; return; }
+    # Tracked changes, staged or not, would be at risk; untracked files are not.
+    _pingo_pull_git diff --quiet >/dev/null 2>&1 &&
+      _pingo_pull_git diff --cached --quiet >/dev/null 2>&1 ||
+      { _pingo_pull_skip DIRTY; return; }
+  fi
 
   old=$(_pingo_pull_git rev-parse -q --verify "refs/heads/$db" 2>/dev/null)
-  head=$(_pingo_pull_git symbolic-ref -q HEAD 2>/dev/null)
   if [ "$head" = "refs/heads/$db" ]; then
-    _pingo_pull_git -c pull.rebase=false pull -q --ff-only --no-rebase "$remote" "$db" >/dev/null 2>&1 || return 1
+    ref=$(_pingo_pull_git -c pull.rebase=false pull -q --ff-only --no-rebase "$remote" "$db" 2>&1 >/dev/null) ||
+      { _pingo_pull_failed "$ref"; return; }
   else
     # Fetching straight into the local ref only accepts fast-forwards.
-    _pingo_pull_git fetch -q "$remote" "$db:$db" >/dev/null 2>&1 || return 1
+    # No -q: it would also silence why a fetch was rejected.
+    ref=$(_pingo_pull_git fetch "$remote" "$db:$db" 2>&1 >/dev/null) ||
+      { _pingo_pull_failed "$ref"; return; }
   fi
   new=$(_pingo_pull_git rev-parse -q --verify "refs/heads/$db" 2>/dev/null)
 
@@ -1018,6 +1076,9 @@ _pingo_pull_one() {
   return 0
 }
 
+# Translated reason of the last skipped/failed Pull -> $_PINGO_M.
+_pingo_pull_why() { _pingo_fmt "PULL_WHY_$_PINGO_PULL_REASON"; }
+
 # Prints the result line of the last Pull of <name>.
 _pingo_pull_report() {
   case "$_PINGO_PULL_RES" in
@@ -1033,8 +1094,14 @@ _pingo_pull_report() {
       _pingo_fmt PULL_CURRENT "$1" "$_PINGO_PULL_BRANCH"
       _pingo_ok "$_PINGO_M"
       ;;
+    skipped)
+      _pingo_pull_why
+      _pingo_fmt PULL_SKIPPED "$1" "$_PINGO_M"
+      _pingo_warn "$_PINGO_M"
+      ;;
     *)
-      _pingo_fmt PULL_FAILED "$1"
+      _pingo_pull_why
+      _pingo_fmt PULL_FAILED "$1" "$_PINGO_M"
       _pingo_fail "$_PINGO_M"
       ;;
   esac
