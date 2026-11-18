@@ -56,6 +56,13 @@ PINGO_MSG_PULL_UPDATED_MANY='%s: %s atualizada, %s commits (%s → %s)'
 PINGO_MSG_PULL_CURRENT='%s: %s já está em dia'
 PINGO_MSG_PULL_FAILED='%s: o pull falhou'
 
+# --- pull: todos os repositórios -------------------------------------------------
+PINGO_MSG_PULL_SUMMARY='Resumo: %s atualizados, %s já em dia, %s ignorados, %s falharam'
+PINGO_MSG_PULL_SUMMARY_SKIPPED='%s: ignorado (%s)'
+PINGO_MSG_PULL_SUMMARY_SKIPPED_BARE='%s: ignorado'
+PINGO_MSG_PULL_SUMMARY_FAILED='%s: falhou (%s)'
+PINGO_MSG_PULL_SUMMARY_FAILED_BARE='%s: falhou'
+
 # --- ajuda ---------------------------------------------------------------------------
 PINGO_MSG_HELP_TAGLINE='seu companheiro fiel para pular entre repositórios'
 PINGO_MSG_HELP_USAGE='Uso'

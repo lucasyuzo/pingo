@@ -61,6 +61,13 @@ PINGO_MSG_PULL_UPDATED_MANY='%s: %s updated, %s commits (%s → %s)'
 PINGO_MSG_PULL_CURRENT='%s: %s already up to date'
 PINGO_MSG_PULL_FAILED='%s: pull failed'
 
+# --- pull: every repository -----------------------------------------------------
+PINGO_MSG_PULL_SUMMARY='Summary: %s updated, %s already up to date, %s skipped, %s failed'
+PINGO_MSG_PULL_SUMMARY_SKIPPED='%s: skipped (%s)'
+PINGO_MSG_PULL_SUMMARY_SKIPPED_BARE='%s: skipped'
+PINGO_MSG_PULL_SUMMARY_FAILED='%s: failed (%s)'
+PINGO_MSG_PULL_SUMMARY_FAILED_BARE='%s: failed'
+
 # --- help ------------------------------------------------------------------------
 PINGO_MSG_HELP_TAGLINE='your faithful companion to jump between repositories'
 PINGO_MSG_HELP_USAGE='Usage'

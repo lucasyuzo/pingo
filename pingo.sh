@@ -1040,7 +1040,53 @@ _pingo_pull_report() {
   esac
 }
 
+# Pulls every Repository in list order: one result line each, then a summary
+# (counts + the reason for each skip/failure). Shared by `pingo pull` and the
+# menu. Returns 1 iff at least one Repository failed; skips don't count.
+_pingo_pull_all() {
+  local i=1 up=0 cur=0 sk=0 fl=0 notes= key= reason=
+  _pingo_require_git || return 1
+  _pingo_load
+  if [ "$_PINGO_N" -eq 0 ]; then
+    _pingo_empty_hint
+    return 0
+  fi
+  while [ "$i" -le "$_PINGO_N" ]; do
+    _pingo_get "$i"
+    _PINGO_PULL_REASON=
+    _pingo_pull_one "$_PINGO_P"
+    _pingo_pull_report "$_PINGO_NAME"
+    reason=${_PINGO_PULL_REASON:-}
+    key=
+    case "$_PINGO_PULL_RES" in
+      updated) up=$((up + 1)) ;;
+      current) cur=$((cur + 1)) ;;
+      skipped) sk=$((sk + 1)); key=PULL_SUMMARY_SKIPPED ;;
+      *) fl=$((fl + 1)); key=PULL_SUMMARY_FAILED ;;
+    esac
+    if [ -n "$key" ]; then
+      if [ -n "$reason" ]; then
+        _pingo_fmt "$key" "$_PINGO_NAME" "$reason"
+      else
+        _pingo_fmt "${key}_BARE" "$_PINGO_NAME"
+      fi
+      case "$key" in
+        *SKIPPED) notes="$notes  ${_C_YEL}!${_C_R} $_PINGO_M$_PINGO_NL" ;;
+        *) notes="$notes  ${_C_RED}✗${_C_R} $_PINGO_M$_PINGO_NL" ;;
+      esac
+    fi
+    i=$((i + 1))
+  done
+  _pingo_fmt PULL_SUMMARY "$up" "$cur" "$sk" "$fl"
+  printf '\n%s%s%s\n%s' "${_C_B}" "$_PINGO_M" "${_C_R}" "$notes"
+  [ "$fl" -eq 0 ]
+}
+
 _pingo_cmd_pull() {
+  if [ $# -eq 0 ]; then
+    _pingo_pull_all
+    return
+  fi
   if [ $# -ne 1 ]; then
     _pingo_fmt USAGE "pingo pull <n|alias>"
     _pingo_fail "$_PINGO_M"
