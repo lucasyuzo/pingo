@@ -928,12 +928,16 @@ _pingo_cmd_config() {
   esac
 }
 
+# Fails (with the shared message) when git is not on PATH.
+_pingo_require_git() {
+  command -v git >/dev/null 2>&1 && return 0
+  _pingo_fmt ERR_NO_GIT
+  _pingo_fail "$_PINGO_M"
+  return 1
+}
+
 _pingo_cmd_update() {
-  if ! command -v git >/dev/null 2>&1; then
-    _pingo_fmt ERR_NO_GIT
-    _pingo_fail "$_PINGO_M"
-    return 1
-  fi
+  _pingo_require_git || return 1
   if [ ! -d "$PINGO_HOME/.git" ]; then
     _pingo_tilde "$PINGO_HOME"
     _pingo_fmt ERR_NOT_CLONE "$_PINGO_TL"

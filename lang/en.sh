@@ -46,7 +46,7 @@ PINGO_MSG_ERR_SAVE='Could not write %s'
 PINGO_MSG_ERR_MISSING_DIR='%s no longer exists at %s'
 PINGO_MSG_HINT_PRUNE='Run "pingo prune" to remove missing repositories.'
 PINGO_MSG_ERR_UNKNOWN_LANG='Unknown language "%s". Run pingo config lang to see the available ones.'
-PINGO_MSG_ERR_NO_GIT='git was not found; it is needed to update pingo.'
+PINGO_MSG_ERR_NO_GIT='git was not found; install it and try again.'
 PINGO_MSG_ERR_NOT_CLONE='%s is not a git clone; update it manually.'
 
 # --- update ----------------------------------------------------------------------

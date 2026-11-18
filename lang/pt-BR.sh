@@ -42,7 +42,7 @@ PINGO_MSG_ERR_SAVE='Não foi possível gravar %s'
 PINGO_MSG_ERR_MISSING_DIR='%s não existe mais em %s'
 PINGO_MSG_HINT_PRUNE='Rode "pingo prune" para remover repositórios inexistentes.'
 PINGO_MSG_ERR_UNKNOWN_LANG='Idioma desconhecido "%s". Rode pingo config lang para ver os disponíveis.'
-PINGO_MSG_ERR_NO_GIT='git não encontrado; ele é necessário para atualizar o pingo.'
+PINGO_MSG_ERR_NO_GIT='git não encontrado; instale-o e tente novamente.'
 PINGO_MSG_ERR_NOT_CLONE='%s não é um clone git; atualize manualmente.'
 
 # --- atualização -------------------------------------------------------------------
