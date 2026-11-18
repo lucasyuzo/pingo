@@ -8,8 +8,11 @@ _pingo_bash_complete() {
     words=$(_pingo_completion_words)
   else
     case "$first" in
-      rm | remove | rename | pull)
+      rm | remove | rename)
         [ "$COMP_CWORD" -eq 2 ] && words=$(_pingo_completion_names)
+        ;;
+      pull)
+        [ "$COMP_CWORD" -eq 2 ] && words=$(_pingo_completion_pull)
         ;;
       mv | move)
         [ "$COMP_CWORD" -eq 2 ] && words=$(_pingo_completion_names)

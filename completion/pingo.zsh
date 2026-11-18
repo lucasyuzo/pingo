@@ -9,9 +9,15 @@ _pingo_zsh_complete() {
     return
   fi
   case "${words[2]}" in
-    rm|remove|rename|mv|move|pull)
+    rm|remove|rename|mv|move)
       if (( CURRENT == 3 )); then
         items=(${(f)"$(_pingo_completion_names)"})
+        compadd -a items
+      fi
+      ;;
+    pull)
+      if (( CURRENT == 3 )); then
+        items=(${(f)"$(_pingo_completion_pull)"})
         compadd -a items
       fi
       ;;
