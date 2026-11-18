@@ -1143,6 +1143,8 @@ _pingo_help_keys() {
   _pingo_fmt KEY_REMOVE;   _pingo_help_line "d" "$_PINGO_M"
   _pingo_fmt KEY_MOVE;     _pingo_help_line "m" "$_PINGO_M"
   _pingo_fmt KEY_RENAME;   _pingo_help_line "r" "$_PINGO_M"
+  _pingo_fmt KEY_PULL;     _pingo_help_line "p" "$_PINGO_M"
+  _pingo_fmt KEY_PULL_ALL; _pingo_help_line "P" "$_PINGO_M"
   _pingo_fmt KEY_SETTINGS; _pingo_help_line "s" "$_PINGO_M"
   _pingo_fmt KEY_HELP;     _pingo_help_line "?" "$_PINGO_M"
   _pingo_fmt KEY_QUIT;     _pingo_help_line "q  Esc" "$_PINGO_M"
@@ -1308,6 +1310,8 @@ _pingo_draw() {
     _pingo_fk "a" F_ADD
     _pingo_fk "d" F_REMOVE
     _pingo_fk "m" F_MOVE
+    _pingo_fk "p" F_PULL
+    _pingo_fk "P" F_PULL_ALL
     _pingo_fk "s" F_SETTINGS
     _pingo_fk "?" F_HELP
     _pingo_fk "q" F_QUIT
@@ -1421,6 +1425,78 @@ _pingo_menu_help() {
   _pingo_fmt PRESS_ANY_KEY
   printf '%s\n  %s%s%s%s\n\033[J' "$el" "${_C_D}" "$_PINGO_M" "${_C_R}" "$el"
   _pingo_readkey || return 1
+  return 0
+}
+
+# Sets $msg (dynamic scope) to "git not found" when git is missing.
+_pingo_menu_need_git() {
+  command -v git >/dev/null 2>&1 && return 0
+  _pingo_fmt ERR_NO_GIT
+  msg="${_C_RED}✗${_C_R} $_PINGO_M"
+  return 1
+}
+
+# p: Pull the selected Repository without leaving the menu. The message line
+# shows the indicator, then the result. Uses (dynamic scope) sel msg.
+_pingo_menu_pull() {
+  local name dir reason
+  [ "$_PINGO_N" -gt 0 ] || return 0
+  _pingo_menu_need_git || return 0
+  _pingo_get "$sel"
+  name=$_PINGO_NAME dir=$_PINGO_P
+  _pingo_fmt PULLING "$name"
+  msg="${_C_CYN}•${_C_R} $_PINGO_M"
+  _pingo_draw
+  _PINGO_PULL_REASON=
+  _pingo_pull_one "$dir"
+  reason=${_PINGO_PULL_REASON:-}
+  case "$_PINGO_PULL_RES" in
+    updated)
+      if [ "$_PINGO_PULL_COUNT" = 1 ]; then
+        _pingo_fmt PULL_UPDATED_ONE "$name" "$_PINGO_PULL_BRANCH" "$_PINGO_PULL_OLD" "$_PINGO_PULL_NEW"
+      else
+        _pingo_fmt PULL_UPDATED_MANY "$name" "$_PINGO_PULL_BRANCH" "$_PINGO_PULL_COUNT" "$_PINGO_PULL_OLD" "$_PINGO_PULL_NEW"
+      fi
+      msg="${_C_GRN}✓${_C_R} $_PINGO_M"
+      ;;
+    current)
+      _pingo_fmt PULL_CURRENT "$name" "$_PINGO_PULL_BRANCH"
+      msg="${_C_GRN}✓${_C_R} $_PINGO_M"
+      ;;
+    skipped)
+      if [ -n "$reason" ]; then
+        _pingo_fmt PULL_SUMMARY_SKIPPED "$name" "$reason"
+      else
+        _pingo_fmt PULL_SUMMARY_SKIPPED_BARE "$name"
+      fi
+      msg="${_C_YEL}!${_C_R} $_PINGO_M"
+      ;;
+    *)
+      if [ -n "$reason" ]; then
+        _pingo_fmt PULL_SUMMARY_FAILED "$name" "$reason"
+      else
+        _pingo_fmt PULL_FAILED "$name"
+      fi
+      msg="${_C_RED}✗${_C_R} $_PINGO_M"
+      ;;
+  esac
+}
+
+# P: Pull every Repository outside the alternate screen, with the same output
+# as `pingo pull`, then wait for Enter and come back to the menu.
+_pingo_menu_pull_all() {
+  _pingo_menu_need_git || return 0
+  _pingo_tui_leave
+  printf '\n'
+  _pingo_pull_all
+  _pingo_fmt PRESS_ENTER
+  printf '\n  %s%s%s\n' "${_C_D}" "$_PINGO_M" "${_C_R}"
+  while :; do
+    _pingo_readkey || return 1
+    [ "$_PINGO_KEY" = enter ] && break
+    [ "$_PINGO_KEY" = quit ] && return 1
+  done
+  _pingo_tui_enter
   return 0
 }
 
@@ -1578,6 +1654,8 @@ _pingo_menu() {
             fi
             ;;
           s | S) _pingo_menu_settings || break ;;
+          p) _pingo_menu_pull ;;
+          P) _pingo_menu_pull_all || break ;;
           '?' | h | H) _pingo_menu_help || break ;;
         esac
         ;;
