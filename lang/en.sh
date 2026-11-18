@@ -54,6 +54,13 @@ PINGO_MSG_UPDATING='Updating pingo…'
 PINGO_MSG_UPDATE_FAILED='Update failed.'
 PINGO_MSG_UPDATED='pingo is up to date (v%s).'
 
+# --- pull ------------------------------------------------------------------------
+# The first %s is the repository, the second its default branch.
+PINGO_MSG_PULL_UPDATED_ONE='%s: %s updated, 1 commit (%s → %s)'
+PINGO_MSG_PULL_UPDATED_MANY='%s: %s updated, %s commits (%s → %s)'
+PINGO_MSG_PULL_CURRENT='%s: %s already up to date'
+PINGO_MSG_PULL_FAILED='%s: pull failed'
+
 # --- help ------------------------------------------------------------------------
 PINGO_MSG_HELP_TAGLINE='your faithful companion to jump between repositories'
 PINGO_MSG_HELP_USAGE='Usage'
@@ -67,6 +74,7 @@ PINGO_MSG_HELP_RENAME='change the alias of a repository'
 PINGO_MSG_HELP_PRUNE='remove repositories that no longer exist'
 PINGO_MSG_HELP_CONFIG='show settings and file locations'
 PINGO_MSG_HELP_LANG='list languages or change the language'
+PINGO_MSG_HELP_PULL='bring the default branch up to date with its remote'
 PINGO_MSG_HELP_UPDATE='update pingo to the latest version'
 PINGO_MSG_HELP_HELP='show this help'
 PINGO_MSG_HELP_VERSION='show the version'

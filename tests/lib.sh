@@ -57,6 +57,51 @@ t_repo() {
   printf 'ref: refs/heads/%s\n' "${2:-main}" >"$1/.git/HEAD"
 }
 
+# --- real git fixture (local only, no network) ---
+# t_git_repo <dir> [branch]: a bare remote "<dir>.remote.git" whose Default
+# branch has one commit, and a clone of it in <dir>. A separate clone,
+# "<dir>.seed", is used by t_git_advance to push new commits to the remote.
+export GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=pingo GIT_AUTHOR_EMAIL=pingo@example.com
+export GIT_COMMITTER_NAME=pingo GIT_COMMITTER_EMAIL=pingo@example.com
+
+t_git() { # git quietly, with fixed settings
+  git -c init.defaultBranch=main -c advice.detachedHead=false "$@" >/dev/null 2>&1
+}
+
+t_git_repo() {
+  local dir=$1 br=${2:-main}
+  t_git init -q --bare "$dir.remote.git"
+  t_git --git-dir="$dir.remote.git" symbolic-ref HEAD "refs/heads/$br"
+  t_git init -q "$dir.seed"
+  t_git -C "$dir.seed" checkout -q -b "$br"
+  printf '0\n' >"$dir.seed/file"
+  t_git -C "$dir.seed" add file
+  t_git -C "$dir.seed" commit -q -m c0
+  t_git -C "$dir.seed" remote add origin "$dir.remote.git"
+  t_git -C "$dir.seed" push -q -u origin "$br"
+  t_git clone -q "$dir.remote.git" "$dir"
+}
+
+# t_git_advance <dir> <n>: push n new commits to the remote's Default branch.
+t_git_advance() {
+  local i=1
+  while [ "$i" -le "$2" ]; do
+    printf '%s\n' "$i" >>"$1.seed/file"
+    t_git -C "$1.seed" commit -q -a -m "c$i"
+    i=$((i + 1))
+  done
+  t_git -C "$1.seed" push -q
+}
+
+# t_git_rev <dir> <ref> [--short]: commit a ref points to.
+t_git_rev() {
+  if [ -n "${3:-}" ]; then
+    git -C "$1" rev-parse --short "$2" 2>/dev/null
+  else
+    git -C "$1" rev-parse "$2" 2>/dev/null
+  fi
+}
+
 t_reset() {
   rm -rf "$XDG_CONFIG_HOME"
   cd "$T_TMP" || exit 1

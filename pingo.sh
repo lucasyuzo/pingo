@@ -33,7 +33,7 @@ unset _pingo_src
 
 _PINGO_NL='
 '
-_PINGO_RESERVED=" ls list add rm remove mv move rename prune config update help version "
+_PINGO_RESERVED=" ls list add rm remove mv move rename prune config update pull help version "
 
 # --- small helpers ----------------------------------------------------------
 
@@ -956,6 +956,108 @@ _pingo_cmd_update() {
   _pingo_ok "$_PINGO_M"
 }
 
+# --- Pull ---------------------------------------------------------------------------
+# The only place pingo runs git over registered Repositories. Never merges,
+# rebases, stashes, checks out or creates commits: fast-forward only.
+
+# git in the Repository being pulled, never prompting for credentials.
+_pingo_pull_git() {
+  GIT_TERMINAL_PROMPT=0 git -C "$_PINGO_PULL_DIR" "$@"
+}
+
+# Pull core: brings the Default branch of the Repository at <dir> up to date.
+#   _PINGO_PULL_RES     updated | current | failed
+#   _PINGO_PULL_BRANCH  Default branch name
+#   _PINGO_PULL_COUNT   commits received (updated)
+#   _PINGO_PULL_OLD/NEW short hashes before/after (updated)
+# Returns 0 for updated/current, 1 otherwise.
+_pingo_pull_one() {
+  local db= remote= head= old= new= ref=
+  _PINGO_PULL_DIR=$1 _PINGO_PULL_RES=failed _PINGO_PULL_BRANCH=
+  _PINGO_PULL_COUNT=0 _PINGO_PULL_OLD= _PINGO_PULL_NEW=
+
+  # Default branch: the remote's declared HEAD, else main, else master.
+  ref=$(_pingo_pull_git symbolic-ref -q refs/remotes/origin/HEAD 2>/dev/null)
+  if [ -n "$ref" ]; then
+    db=${ref#refs/remotes/origin/}
+  elif _pingo_pull_git show-ref -q --verify refs/heads/main 2>/dev/null; then
+    db=main
+  elif _pingo_pull_git show-ref -q --verify refs/heads/master 2>/dev/null; then
+    db=master
+  else
+    return 1
+  fi
+  _PINGO_PULL_BRANCH=$db
+
+  # Remote: the Default branch's upstream, else origin.
+  remote=$(_pingo_pull_git config --get "branch.$db.remote" 2>/dev/null)
+  [ -n "$remote" ] || remote=origin
+
+  old=$(_pingo_pull_git rev-parse -q --verify "refs/heads/$db" 2>/dev/null)
+  head=$(_pingo_pull_git symbolic-ref -q HEAD 2>/dev/null)
+  if [ "$head" = "refs/heads/$db" ]; then
+    _pingo_pull_git -c pull.rebase=false pull -q --ff-only --no-rebase "$remote" "$db" >/dev/null 2>&1 || return 1
+  else
+    # Fetching straight into the local ref only accepts fast-forwards.
+    _pingo_pull_git fetch -q "$remote" "$db:$db" >/dev/null 2>&1 || return 1
+  fi
+  new=$(_pingo_pull_git rev-parse -q --verify "refs/heads/$db" 2>/dev/null)
+
+  if [ "$old" = "$new" ]; then
+    _PINGO_PULL_RES=current
+    return 0
+  fi
+  _PINGO_PULL_RES=updated
+  if [ -n "$old" ]; then
+    _PINGO_PULL_COUNT=$(_pingo_pull_git rev-list --count "$old..$new" 2>/dev/null)
+    _PINGO_PULL_OLD=$(_pingo_pull_git rev-parse --short "$old" 2>/dev/null)
+  else
+    _PINGO_PULL_COUNT=$(_pingo_pull_git rev-list --count "$new" 2>/dev/null)
+  fi
+  _PINGO_PULL_NEW=$(_pingo_pull_git rev-parse --short "$new" 2>/dev/null)
+  return 0
+}
+
+# Prints the result line of the last Pull of <name>.
+_pingo_pull_report() {
+  case "$_PINGO_PULL_RES" in
+    updated)
+      if [ "$_PINGO_PULL_COUNT" = 1 ]; then
+        _pingo_fmt PULL_UPDATED_ONE "$1" "$_PINGO_PULL_BRANCH" "$_PINGO_PULL_OLD" "$_PINGO_PULL_NEW"
+      else
+        _pingo_fmt PULL_UPDATED_MANY "$1" "$_PINGO_PULL_BRANCH" "$_PINGO_PULL_COUNT" "$_PINGO_PULL_OLD" "$_PINGO_PULL_NEW"
+      fi
+      _pingo_ok "$_PINGO_M"
+      ;;
+    current)
+      _pingo_fmt PULL_CURRENT "$1" "$_PINGO_PULL_BRANCH"
+      _pingo_ok "$_PINGO_M"
+      ;;
+    *)
+      _pingo_fmt PULL_FAILED "$1"
+      _pingo_fail "$_PINGO_M"
+      ;;
+  esac
+}
+
+_pingo_cmd_pull() {
+  if [ $# -ne 1 ]; then
+    _pingo_fmt USAGE "pingo pull <n|alias>"
+    _pingo_fail "$_PINGO_M"
+    return 2
+  fi
+  _pingo_require_git || return 1
+  _pingo_load
+  if ! _pingo_resolve "$1"; then
+    _pingo_fail "$_PINGO_M"
+    return 1
+  fi
+  _pingo_get "$_PINGO_IDX"
+  _pingo_pull_one "$_PINGO_P"
+  _pingo_pull_report "$_PINGO_NAME"
+  [ "$_PINGO_PULL_RES" = updated ] || [ "$_PINGO_PULL_RES" = current ]
+}
+
 _pingo_help_line() { # command description
   _pingo_pad "$1" 32
   printf '    %s%s%s%s\n' "${_C_CYN}" "$_PINGO_PAD" "${_C_R}" "$2"
@@ -976,6 +1078,7 @@ _pingo_cmd_help() {
   _pingo_fmt HELP_PRUNE;   _pingo_help_line "pingo prune" "$_PINGO_M"
   _pingo_fmt HELP_CONFIG;  _pingo_help_line "pingo config" "$_PINGO_M"
   _pingo_fmt HELP_LANG;    _pingo_help_line "pingo config lang [code]" "$_PINGO_M"
+  _pingo_fmt HELP_PULL;    _pingo_help_line "pingo pull [n|alias]" "$_PINGO_M"
   _pingo_fmt HELP_UPDATE;  _pingo_help_line "pingo update" "$_PINGO_M"
   _pingo_fmt HELP_HELP;    _pingo_help_line "pingo help" "$_PINGO_M"
   _pingo_fmt HELP_VERSION; _pingo_help_line "pingo --version" "$_PINGO_M"
@@ -1468,6 +1571,7 @@ pingo() {
     prune) _pingo_cmd_prune ;;
     config) shift; _pingo_cmd_config "$@" ;;
     update) _pingo_cmd_update ;;
+    pull) shift; _pingo_cmd_pull "$@" ;;
     help | -h | --help) _pingo_cmd_help ;;
     version | -v | -V | --version) printf 'pingo %s\n' "$PINGO_VERSION" ;;
     -*)
@@ -1484,7 +1588,7 @@ _pingo_completion_words() {
   local i=1
   _pingo_init
   _pingo_load
-  printf '%s\n' ls add rm mv rename prune config update help
+  printf '%s\n' ls add rm mv rename prune config update pull help
   while [ "$i" -le "$_PINGO_N" ]; do
     _pingo_get "$i"
     printf '%s\n' "$_PINGO_NAME"
