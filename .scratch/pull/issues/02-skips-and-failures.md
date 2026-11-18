@@ -4,11 +4,11 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Skipped, with a reason, and nothing touched: directory missing; not a git repository; no remote; no Default branch found; checkout is the Default branch with tracked uncommitted changes (staged or unstaged); checkout is the Default branch with a merge or rebase in progress; Default branch checked out in another worktree
-- [ ] Untracked files on the Default branch do not cause a skip
-- [ ] Failed, with a short reason: diverged (not a fast-forward); unreachable remote; authentication required (does not hang waiting for input)
-- [ ] Single-Repository Pull exits `1` when skipped or failed
-- [ ] Every skip/failure reason exists in `en` and `pt-BR`
-- [ ] Tests assert the real git state is unchanged for every skip and failure
+- [x] Skipped, with a reason, and nothing touched: directory missing; not a git repository; no remote; no Default branch found; checkout is the Default branch with tracked uncommitted changes (staged or unstaged); checkout is the Default branch with a merge or rebase in progress; Default branch checked out in another worktree
+- [x] Untracked files on the Default branch do not cause a skip
+- [x] Failed, with a short reason: diverged (not a fast-forward); unreachable remote; authentication required (does not hang waiting for input)
+- [x] Single-Repository Pull exits `1` when skipped or failed
+- [x] Every skip/failure reason exists in `en` and `pt-BR`
+- [x] Tests assert the real git state is unchanged for every skip and failure

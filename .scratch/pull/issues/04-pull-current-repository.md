@@ -4,12 +4,12 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Works from a Repository's root and from any subdirectory of it
-- [ ] With nested registered Repositories, the deepest match wins
-- [ ] Outside any registered Repository → clear error, exit `1`, nothing pulled
-- [ ] Behaves like single-Repository Pull for output and exit code
-- [ ] Tab completion for `pingo pull <TAB>` offers `.` along with aliases and names
-- [ ] `pingo help` mentions `.`
-- [ ] New messages exist in `en` and `pt-BR`
+- [x] Works from a Repository's root and from any subdirectory of it
+- [x] With nested registered Repositories, the deepest match wins
+- [x] Outside any registered Repository → clear error, exit `1`, nothing pulled
+- [x] Behaves like single-Repository Pull for output and exit code
+- [x] Tab completion for `pingo pull <TAB>` offers `.` along with aliases and names
+- [x] `pingo help` mentions `.`
+- [x] New messages exist in `en` and `pt-BR`

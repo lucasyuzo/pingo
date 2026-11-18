@@ -8,21 +8,21 @@ Also introduces the test fixture from the spec's Testing Decisions (local bare r
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `pingo pull <alias>` and `pingo pull <n>` resolve the Repository exactly like navigation; unknown alias/position fails with the existing resolution error
-- [ ] Checkout is the Default branch → fast-forwarded in place; working tree reflects the new commits
-- [ ] Checkout is a feature branch → Default branch ref advances; checkout, feature branch, and working tree (including uncommitted changes) are untouched
-- [ ] Detached HEAD → Default branch ref advances; HEAD unchanged
-- [ ] Default branch discovered from the remote's declared HEAD, else local `main`, else local `master`
-- [ ] Remote is the Default branch's upstream, else `origin`
-- [ ] Only the Default branch is fetched
-- [ ] Result line shows "updated" with commit count and old → new short hashes, or "already up to date"; exit `0`
-- [ ] Git runs with terminal prompts disabled
-- [ ] Without `git` on `PATH`, fails immediately with the same message as `pingo update`
-- [ ] Extra arguments → usage error, exit `2`
-- [ ] `pingo pull` does not change the shell's current directory
-- [ ] `pull` is rejected as a new alias and offered by tab completion as a command word
-- [ ] `pingo help` lists `pingo pull [n|alias]`
-- [ ] All new messages exist in `en` and `pt-BR`
-- [ ] Tests pass under every shell in the test runner
+- [x] `pingo pull <alias>` and `pingo pull <n>` resolve the Repository exactly like navigation; unknown alias/position fails with the existing resolution error
+- [x] Checkout is the Default branch → fast-forwarded in place; working tree reflects the new commits
+- [x] Checkout is a feature branch → Default branch ref advances; checkout, feature branch, and working tree (including uncommitted changes) are untouched
+- [x] Detached HEAD → Default branch ref advances; HEAD unchanged
+- [x] Default branch discovered from the remote's declared HEAD, else local `main`, else local `master`
+- [x] Remote is the Default branch's upstream, else `origin`
+- [x] Only the Default branch is fetched
+- [x] Result line shows "updated" with commit count and old → new short hashes, or "already up to date"; exit `0`
+- [x] Git runs with terminal prompts disabled
+- [x] Without `git` on `PATH`, fails immediately with the same message as `pingo update`
+- [x] Extra arguments → usage error, exit `2`
+- [x] `pingo pull` does not change the shell's current directory
+- [x] `pull` is rejected as a new alias and offered by tab completion as a command word
+- [x] `pingo help` lists `pingo pull [n|alias]`
+- [x] All new messages exist in `en` and `pt-BR`
+- [x] Tests pass under every shell in the test runner

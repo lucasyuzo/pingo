@@ -4,12 +4,12 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Repositories are pulled in list order, one result line each
-- [ ] Summary counts updated, already up to date, skipped, and failed, and lists the reason for each skip/failure
-- [ ] A failure in one Repository doesn't stop the run
-- [ ] Exit `1` iff at least one Repository failed; skips alone exit `0`
-- [ ] Empty list shows the existing empty hint and exits `0`
-- [ ] `pingo help` shows the no-argument form
-- [ ] New messages exist in `en` and `pt-BR`
+- [x] Repositories are pulled in list order, one result line each
+- [x] Summary counts updated, already up to date, skipped, and failed, and lists the reason for each skip/failure
+- [x] A failure in one Repository doesn't stop the run
+- [x] Exit `1` iff at least one Repository failed; skips alone exit `0`
+- [x] Empty list shows the existing empty hint and exits `0`
+- [x] `pingo help` shows the no-argument form
+- [x] New messages exist in `en` and `pt-BR`
