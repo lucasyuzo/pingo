@@ -1082,22 +1082,76 @@ _pingo_pull_all() {
   [ "$fl" -eq 0 ]
 }
 
+# Registered Repository containing the current directory -> $_PINGO_IDX.
+# The deepest match wins. Compares the logical path first and the physical
+# one (pwd -P) as a fallback, so symlinked paths still match.
+_pingo_resolve_here() {
+  local i=1 best=0 bestlen=0 here phys key pkey rkey len
+  _PINGO_IDX=
+  _pingo_normpath "$PWD" || _PINGO_NP=$PWD
+  _pingo_pathkey "$_PINGO_NP"
+  here=$_PINGO_PK
+  phys=$(pwd -P 2>/dev/null) || phys=$PWD
+  _pingo_normpath "$phys" && phys=$_PINGO_NP
+  _pingo_pathkey "$phys"
+  pkey=$_PINGO_PK
+  while [ "$i" -le "$_PINGO_N" ]; do
+    _pingo_get "$i"
+    _pingo_pathkey "$_PINGO_P"
+    rkey=$_PINGO_PK
+    key=$here
+    case "$here/" in
+      "${rkey%/}/"*) ;;
+      *)
+        key=
+        if [ -d "$_PINGO_P" ]; then
+          rkey=$(CDPATH= _pingo_cd_quiet "$_PINGO_P" && pwd -P 2>/dev/null) || rkey=
+          if [ -n "$rkey" ] && _pingo_normpath "$rkey"; then
+            _pingo_pathkey "$_PINGO_NP"
+            rkey=$_PINGO_PK
+            case "$pkey/" in "${rkey%/}/"*) key=$pkey ;; esac
+          fi
+        fi
+        ;;
+    esac
+    if [ -n "$key" ]; then
+      len=${#rkey}
+      if [ "$len" -gt "$bestlen" ]; then
+        best=$i
+        bestlen=$len
+      fi
+    fi
+    i=$((i + 1))
+  done
+  if [ "$best" -gt 0 ]; then
+    _PINGO_IDX=$best
+    return 0
+  fi
+  _pingo_tilde "$PWD"
+  _pingo_fmt ERR_NOT_IN_REPO "$_PINGO_TL"
+  return 1
+}
+
 _pingo_cmd_pull() {
   if [ $# -eq 0 ]; then
     _pingo_pull_all
     return
   fi
   if [ $# -ne 1 ]; then
-    _pingo_fmt USAGE "pingo pull <n|alias>"
+    _pingo_fmt USAGE "pingo pull [n|alias|.]"
     _pingo_fail "$_PINGO_M"
     return 2
   fi
   _pingo_require_git || return 1
   _pingo_load
-  if ! _pingo_resolve "$1"; then
+  if [ "$1" = . ]; then
+    _pingo_resolve_here
+  else
+    _pingo_resolve "$1"
+  fi || {
     _pingo_fail "$_PINGO_M"
     return 1
-  fi
+  }
   _pingo_get "$_PINGO_IDX"
   _pingo_pull_one "$_PINGO_P"
   _pingo_pull_report "$_PINGO_NAME"
@@ -1125,6 +1179,7 @@ _pingo_cmd_help() {
   _pingo_fmt HELP_CONFIG;  _pingo_help_line "pingo config" "$_PINGO_M"
   _pingo_fmt HELP_LANG;    _pingo_help_line "pingo config lang [code]" "$_PINGO_M"
   _pingo_fmt HELP_PULL;    _pingo_help_line "pingo pull [n|alias]" "$_PINGO_M"
+  _pingo_fmt HELP_PULL_HERE; _pingo_help_line "pingo pull ." "$_PINGO_M"
   _pingo_fmt HELP_UPDATE;  _pingo_help_line "pingo update" "$_PINGO_M"
   _pingo_fmt HELP_HELP;    _pingo_help_line "pingo help" "$_PINGO_M"
   _pingo_fmt HELP_VERSION; _pingo_help_line "pingo --version" "$_PINGO_M"
@@ -1651,6 +1706,12 @@ _pingo_completion_names() {
     printf '%s\n' "$_PINGO_NAME"
     i=$((i + 1))
   done
+}
+
+# Words offered after "pingo pull": "." (current Repository) plus names.
+_pingo_completion_pull() {
+  printf '%s\n' .
+  _pingo_completion_names
 }
 
 # --- tab completion -----------------------------------------------------------------
