@@ -52,6 +52,7 @@ PINGO_MSG_UPDATE_FAILED='A atualização falhou.'
 PINGO_MSG_UPDATED='pingo está atualizado (v%s).'
 
 # --- pull ----------------------------------------------------------------------------
+# O primeiro %s é o repositório, o segundo a sua branch padrão.
 PINGO_MSG_PULL_UPDATED_ONE='%s: %s atualizada, 1 commit (%s → %s)'
 PINGO_MSG_PULL_UPDATED_MANY='%s: %s atualizada, %s commits (%s → %s)'
 PINGO_MSG_PULL_CURRENT='%s: %s já está em dia'
@@ -72,8 +73,6 @@ PINGO_MSG_PULL_WHY_ERROR='erro do git'
 
 # --- pull: todos os repositórios -------------------------------------------------
 PINGO_MSG_PULL_SUMMARY='Resumo: %s atualizados, %s já em dia, %s ignorados, %s falharam'
-PINGO_MSG_PULL_SUMMARY_SKIPPED='%s: ignorado (%s)'
-PINGO_MSG_PULL_SUMMARY_FAILED='%s: falhou (%s)'
 PINGO_MSG_PULLING='fazendo o pull de %s…'
 
 # --- ajuda ---------------------------------------------------------------------------

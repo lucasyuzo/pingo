@@ -60,10 +60,19 @@ _pingo_fmt() {
   printf -v _PINGO_M "$_pf" "$@"
 }
 
-_pingo_ok() { printf '%s✓%s %s\n' "${_C_GRN}" "${_C_R}" "$1"; }
-_pingo_info() { printf '%s•%s %s\n' "${_C_CYN}" "${_C_R}" "$1"; }
-_pingo_warn() { printf '%s!%s %s\n' "${_C_YEL}" "${_C_R}" "$1" >&2; }
-_pingo_fail() { printf '%s✗%s %s\n' "${_C_RED}" "${_C_R}" "$1" >&2; }
+# Colored glyph of an output level (ok info warn fail) -> $_PINGO_MARK.
+_pingo_mark() {
+  case "$1" in
+    ok) _PINGO_MARK="${_C_GRN}✓${_C_R}" ;;
+    info) _PINGO_MARK="${_C_CYN}•${_C_R}" ;;
+    warn) _PINGO_MARK="${_C_YEL}!${_C_R}" ;;
+    *) _PINGO_MARK="${_C_RED}✗${_C_R}" ;;
+  esac
+}
+_pingo_ok() { _pingo_mark ok; printf '%s %s\n' "$_PINGO_MARK" "$1"; }
+_pingo_info() { _pingo_mark info; printf '%s %s\n' "$_PINGO_MARK" "$1"; }
+_pingo_warn() { _pingo_mark warn; printf '%s %s\n' "$_PINGO_MARK" "$1" >&2; }
+_pingo_fail() { _pingo_mark fail; printf '%s %s\n' "$_PINGO_MARK" "$1" >&2; }
 
 _pingo_is_yes() {
   case "$1" in y | Y | yes | Yes | YES | s | S | sim | Sim | SIM) return 0 ;; esac
@@ -928,11 +937,13 @@ _pingo_cmd_config() {
   esac
 }
 
-# Fails (with the shared message) when git is not on PATH.
+# Fails (with the shared message) when git is not on PATH. With -q it prints
+# nothing and leaves the message in $_PINGO_M, for callers that show it
+# themselves (the menu's message line).
 _pingo_require_git() {
   command -v git >/dev/null 2>&1 && return 0
   _pingo_fmt ERR_NO_GIT
-  _pingo_fail "$_PINGO_M"
+  [ "${1:-}" = -q ] || _pingo_fail "$_PINGO_M"
   return 1
 }
 
@@ -1090,8 +1101,9 @@ _pingo_pull_one() {
 # Translated reason of the last skipped/failed Pull -> $_PINGO_M.
 _pingo_pull_why() { _pingo_fmt "PULL_WHY_$_PINGO_PULL_REASON"; }
 
-# Prints the result line of the last Pull of <name>.
-_pingo_pull_report() {
+# Result line of the last Pull of <name> -> $_PINGO_M, and its output level
+# (ok warn fail, see _pingo_mark) -> $_PINGO_PULL_LEVEL.
+_pingo_pull_result() {
   case "$_PINGO_PULL_RES" in
     updated)
       if [ "$_PINGO_PULL_COUNT" = 1 ]; then
@@ -1099,30 +1111,36 @@ _pingo_pull_report() {
       else
         _pingo_fmt PULL_UPDATED_MANY "$1" "$_PINGO_PULL_BRANCH" "$_PINGO_PULL_COUNT" "$_PINGO_PULL_OLD" "$_PINGO_PULL_NEW"
       fi
-      _pingo_ok "$_PINGO_M"
+      _PINGO_PULL_LEVEL=ok
       ;;
     current)
       _pingo_fmt PULL_CURRENT "$1" "$_PINGO_PULL_BRANCH"
-      _pingo_ok "$_PINGO_M"
+      _PINGO_PULL_LEVEL=ok
       ;;
     skipped)
       _pingo_pull_why
       _pingo_fmt PULL_SKIPPED "$1" "$_PINGO_M"
-      _pingo_warn "$_PINGO_M"
+      _PINGO_PULL_LEVEL=warn
       ;;
     *)
       _pingo_pull_why
       _pingo_fmt PULL_FAILED "$1" "$_PINGO_M"
-      _pingo_fail "$_PINGO_M"
+      _PINGO_PULL_LEVEL=fail
       ;;
   esac
 }
 
+# Prints the result line of the last Pull of <name>.
+_pingo_pull_report() {
+  _pingo_pull_result "$1"
+  "_pingo_$_PINGO_PULL_LEVEL" "$_PINGO_M"
+}
+
 # Pulls every Repository in list order: one result line each, then a summary
-# (counts + the reason for each skip/failure). Shared by `pingo pull` and the
-# menu. Returns 1 iff at least one Repository failed; skips don't count.
+# (counts + the result line of each skip/failure again). Shared by `pingo pull`
+# and the menu. Returns 1 iff at least one Repository failed; skips don't count.
 _pingo_pull_all() {
-  local i=1 up=0 cur=0 sk=0 fl=0 notes= key= reason=
+  local i=1 up=0 cur=0 sk=0 fl=0 notes=
   _pingo_require_git || return 1
   _pingo_load
   if [ "$_PINGO_N" -eq 0 ]; then
@@ -1133,21 +1151,15 @@ _pingo_pull_all() {
     _pingo_get "$i"
     _pingo_pull_one "$_PINGO_P"
     _pingo_pull_report "$_PINGO_NAME"
-    key=
     case "$_PINGO_PULL_RES" in
       updated) up=$((up + 1)) ;;
       current) cur=$((cur + 1)) ;;
-      skipped) sk=$((sk + 1)); key=PULL_SUMMARY_SKIPPED ;;
-      *) fl=$((fl + 1)); key=PULL_SUMMARY_FAILED ;;
+      skipped) sk=$((sk + 1)) ;;
+      *) fl=$((fl + 1)) ;;
     esac
-    if [ -n "$key" ]; then
-      _pingo_pull_why
-      reason=$_PINGO_M
-      _pingo_fmt "$key" "$_PINGO_NAME" "$reason"
-      case "$key" in
-        *SKIPPED) notes="$notes  ${_C_YEL}!${_C_R} $_PINGO_M$_PINGO_NL" ;;
-        *) notes="$notes  ${_C_RED}✗${_C_R} $_PINGO_M$_PINGO_NL" ;;
-      esac
+    if [ "$_PINGO_PULL_LEVEL" != ok ]; then
+      _pingo_mark "$_PINGO_PULL_LEVEL"
+      notes="$notes  $_PINGO_MARK $_PINGO_M$_PINGO_NL"
     fi
     i=$((i + 1))
   done
@@ -1559,48 +1571,28 @@ _pingo_menu_help() {
 
 # Sets $msg (dynamic scope) to "git not found" when git is missing.
 _pingo_menu_need_git() {
-  command -v git >/dev/null 2>&1 && return 0
-  _pingo_fmt ERR_NO_GIT
-  msg="${_C_RED}✗${_C_R} $_PINGO_M"
+  _pingo_require_git -q && return 0
+  _pingo_mark fail
+  msg="$_PINGO_MARK $_PINGO_M"
   return 1
 }
 
 # p: Pull the selected Repository without leaving the menu. The message line
 # shows the indicator, then the result. Uses (dynamic scope) sel msg.
 _pingo_menu_pull() {
-  local name dir reason
+  local name dir
   [ "$_PINGO_N" -gt 0 ] || return 0
   _pingo_menu_need_git || return 0
   _pingo_get "$sel"
   name=$_PINGO_NAME dir=$_PINGO_P
   _pingo_fmt PULLING "$name"
-  msg="${_C_CYN}•${_C_R} $_PINGO_M"
+  _pingo_mark info
+  msg="$_PINGO_MARK $_PINGO_M"
   _pingo_draw
   _pingo_pull_one "$dir"
-  _pingo_pull_why
-  reason=$_PINGO_M
-  case "$_PINGO_PULL_RES" in
-    updated)
-      if [ "$_PINGO_PULL_COUNT" = 1 ]; then
-        _pingo_fmt PULL_UPDATED_ONE "$name" "$_PINGO_PULL_BRANCH" "$_PINGO_PULL_OLD" "$_PINGO_PULL_NEW"
-      else
-        _pingo_fmt PULL_UPDATED_MANY "$name" "$_PINGO_PULL_BRANCH" "$_PINGO_PULL_COUNT" "$_PINGO_PULL_OLD" "$_PINGO_PULL_NEW"
-      fi
-      msg="${_C_GRN}✓${_C_R} $_PINGO_M"
-      ;;
-    current)
-      _pingo_fmt PULL_CURRENT "$name" "$_PINGO_PULL_BRANCH"
-      msg="${_C_GRN}✓${_C_R} $_PINGO_M"
-      ;;
-    skipped)
-      _pingo_fmt PULL_SKIPPED "$name" "$reason"
-      msg="${_C_YEL}!${_C_R} $_PINGO_M"
-      ;;
-    *)
-      _pingo_fmt PULL_FAILED "$name" "$reason"
-      msg="${_C_RED}✗${_C_R} $_PINGO_M"
-      ;;
-  esac
+  _pingo_pull_result "$name"
+  _pingo_mark "$_PINGO_PULL_LEVEL"
+  msg="$_PINGO_MARK $_PINGO_M"
 }
 
 # P: Pull every Repository outside the alternate screen, with the same output
