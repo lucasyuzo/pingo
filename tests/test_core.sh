@@ -153,6 +153,6 @@ assert_contains "$out" "No repositories yet" "empty list hint"
 
 # --- help & version ---
 assert_contains "$(pingo help)" "pingo add <path> [alias]" "help lists commands"
-assert_eq "$(pingo --version)" "pingo $PINGO_VERSION" "version"
+assert_eq "$(pingo --version)" "pingo 0.2.0" "version is 0.2.0"
 
 t_done

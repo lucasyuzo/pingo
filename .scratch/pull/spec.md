@@ -1,6 +1,6 @@
 # Spec: Pull the Default branch of registered Repositories
 
-Status: ready-for-agent
+Status: done
 
 ## Problem Statement
 

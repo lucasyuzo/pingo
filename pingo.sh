@@ -13,7 +13,7 @@
 #  from 0, zsh from 1); lists are kept as newline-separated strings.
 # ---------------------------------------------------------------------------
 
-PINGO_VERSION="0.1.0"
+PINGO_VERSION="0.2.0"
 
 # --- installation directory -------------------------------------------------
 if [ -n "${ZSH_VERSION:-}" ]; then
@@ -33,7 +33,7 @@ unset _pingo_src
 
 _PINGO_NL='
 '
-_PINGO_RESERVED=" ls list add rm remove mv move rename prune config update help version "
+_PINGO_RESERVED=" ls list add rm remove mv move rename prune config update pull help version "
 
 # --- small helpers ----------------------------------------------------------
 
@@ -60,10 +60,19 @@ _pingo_fmt() {
   printf -v _PINGO_M "$_pf" "$@"
 }
 
-_pingo_ok() { printf '%s✓%s %s\n' "${_C_GRN}" "${_C_R}" "$1"; }
-_pingo_info() { printf '%s•%s %s\n' "${_C_CYN}" "${_C_R}" "$1"; }
-_pingo_warn() { printf '%s!%s %s\n' "${_C_YEL}" "${_C_R}" "$1" >&2; }
-_pingo_fail() { printf '%s✗%s %s\n' "${_C_RED}" "${_C_R}" "$1" >&2; }
+# Colored glyph of an output level (ok info warn fail) -> $_PINGO_MARK.
+_pingo_mark() {
+  case "$1" in
+    ok) _PINGO_MARK="${_C_GRN}✓${_C_R}" ;;
+    info) _PINGO_MARK="${_C_CYN}•${_C_R}" ;;
+    warn) _PINGO_MARK="${_C_YEL}!${_C_R}" ;;
+    *) _PINGO_MARK="${_C_RED}✗${_C_R}" ;;
+  esac
+}
+_pingo_ok() { _pingo_mark ok; printf '%s %s\n' "$_PINGO_MARK" "$1"; }
+_pingo_info() { _pingo_mark info; printf '%s %s\n' "$_PINGO_MARK" "$1"; }
+_pingo_warn() { _pingo_mark warn; printf '%s %s\n' "$_PINGO_MARK" "$1" >&2; }
+_pingo_fail() { _pingo_mark fail; printf '%s %s\n' "$_PINGO_MARK" "$1" >&2; }
 
 _pingo_is_yes() {
   case "$1" in y | Y | yes | Yes | YES | s | S | sim | Sim | SIM) return 0 ;; esac
@@ -928,12 +937,18 @@ _pingo_cmd_config() {
   esac
 }
 
+# Fails (with the shared message) when git is not on PATH. With -q it prints
+# nothing and leaves the message in $_PINGO_M, for callers that show it
+# themselves (the menu's message line).
+_pingo_require_git() {
+  command -v git >/dev/null 2>&1 && return 0
+  _pingo_fmt ERR_NO_GIT
+  [ "${1:-}" = -q ] || _pingo_fail "$_PINGO_M"
+  return 1
+}
+
 _pingo_cmd_update() {
-  if ! command -v git >/dev/null 2>&1; then
-    _pingo_fmt ERR_NO_GIT
-    _pingo_fail "$_PINGO_M"
-    return 1
-  fi
+  _pingo_require_git || return 1
   if [ ! -d "$PINGO_HOME/.git" ]; then
     _pingo_tilde "$PINGO_HOME"
     _pingo_fmt ERR_NOT_CLONE "$_PINGO_TL"
@@ -950,6 +965,283 @@ _pingo_cmd_update() {
   . "$PINGO_HOME/pingo.sh"
   _pingo_fmt UPDATED "$PINGO_VERSION"
   _pingo_ok "$_PINGO_M"
+}
+
+# --- Pull ---------------------------------------------------------------------------
+# The only place pingo runs git over registered Repositories. Never merges,
+# rebases, stashes, checks out or creates commits: fast-forward only.
+
+# git in the Repository being pulled, never prompting for credentials.
+_pingo_pull_git() {
+  # No askpass either (IDEs set GIT_ASKPASS): credential prompts fail instead of
+  # stalling; SSH agent keys still work. LC_ALL=C: failures are classified by
+  # git's untranslated messages.
+  # SSH in batch mode too (no host key or passphrase prompts on the tty),
+  # unless the user chose their own ssh command. Checked once per Pull.
+  if [ -z "$_PINGO_PULL_SSH" ]; then
+    _PINGO_PULL_SSH=own
+    [ -z "${GIT_SSH_COMMAND:-}" ] && [ -z "${GIT_SSH:-}" ] &&
+      [ -z "$(git -C "$_PINGO_PULL_DIR" config --get core.sshCommand 2>/dev/null)" ] &&
+      _PINGO_PULL_SSH=batch
+  fi
+  if [ "$_PINGO_PULL_SSH" = batch ]; then
+    LC_ALL=C GIT_TERMINAL_PROMPT=0 GIT_ASKPASS= SSH_ASKPASS= GIT_SSH_COMMAND='ssh -o BatchMode=yes' \
+      git -C "$_PINGO_PULL_DIR" -c core.askPass= "$@"
+  else
+    LC_ALL=C GIT_TERMINAL_PROMPT=0 GIT_ASKPASS= SSH_ASKPASS= \
+      git -C "$_PINGO_PULL_DIR" -c core.askPass= "$@"
+  fi
+}
+
+# Ends the Pull with a result and reason (see _pingo_pull_one); returns 1.
+_pingo_pull_skip() { _PINGO_PULL_RES=skipped _PINGO_PULL_REASON=$1; return 1; }
+_pingo_pull_fail() { _PINGO_PULL_RES=failed _PINGO_PULL_REASON=$1; return 1; }
+
+# Fails the Pull with a reason classified from git's <stderr> (always in English).
+_pingo_pull_failed() {
+  case "$1" in
+    *"non-fast-forward"* | *"Not possible to fast-forward"* | *"fast-forwarded"*) _pingo_pull_fail DIVERGED ;;
+    *"terminal prompts disabled"* | *"could not read Username"* | *"could not read Password"* | \
+      *"Authentication failed"* | *"Permission denied"* | *"Host key verification failed"*)
+      _pingo_pull_fail AUTH ;;
+    *"Could not read from remote"* | *"does not appear to be a git repository"* | \
+      *"unable to access"* | *"Could not resolve"* | *"Failed to connect"* | \
+      *"Connection refused"* | *"timed out"* | *"Network is unreachable"*)
+      _pingo_pull_fail UNREACHABLE ;;
+    *) _pingo_pull_fail ERROR ;;
+  esac
+}
+
+# Pull core: brings the Default branch of the Repository at <dir> up to date.
+#   _PINGO_PULL_RES     updated | current | skipped | failed
+#   _PINGO_PULL_REASON  why it was skipped or failed: a PULL_WHY_<REASON>
+#                       message key suffix (translate with _pingo_pull_why)
+#   _PINGO_PULL_BRANCH  Default branch name
+#   _PINGO_PULL_COUNT   commits received (updated)
+#   _PINGO_PULL_OLD/NEW short hashes before/after (updated)
+# Prints nothing. Returns 0 for updated/current, 1 otherwise.
+_pingo_pull_one() {
+  local db= remote= head= old= new= err= state= file=
+  _PINGO_PULL_DIR=$1 _PINGO_PULL_SSH= _PINGO_PULL_RES=failed _PINGO_PULL_REASON=ERROR _PINGO_PULL_BRANCH=
+  _PINGO_PULL_COUNT=0 _PINGO_PULL_OLD= _PINGO_PULL_NEW=
+
+  # Pre-checks: anything that can't be pulled safely is skipped, untouched.
+  [ -d "$1" ] || { _pingo_pull_skip MISSING; return; }
+  # Its own .git, so a plain folder inside another Repository is not mistaken for it.
+  [ -e "$1/.git" ] && _pingo_pull_git rev-parse -q --git-dir >/dev/null 2>&1 ||
+    { _pingo_pull_skip NOT_GIT; return; }
+
+  # Default branch: the remote's declared HEAD, else main, else master. It must
+  # exist locally: Pull never creates branches.
+  db=$(_pingo_pull_git symbolic-ref -q refs/remotes/origin/HEAD 2>/dev/null)
+  db=${db#refs/remotes/origin/}
+  if [ -z "$db" ]; then
+    db=main
+    _pingo_pull_git show-ref -q --verify refs/heads/main 2>/dev/null || db=master
+  fi
+  _pingo_pull_git show-ref -q --verify "refs/heads/$db" 2>/dev/null ||
+    { _pingo_pull_skip NO_BRANCH; return; }
+  _PINGO_PULL_BRANCH=$db
+
+  # Remote: the Default branch's upstream, else origin.
+  remote=$(_pingo_pull_git config --get "branch.$db.remote" 2>/dev/null)
+  _pingo_pull_git config --get "remote.$remote.url" >/dev/null 2>&1 || remote=origin
+  _pingo_pull_git config --get "remote.$remote.url" >/dev/null 2>&1 ||
+    { _pingo_pull_skip NO_REMOTE; return; }
+
+  head=$(_pingo_pull_git symbolic-ref -q HEAD 2>/dev/null)
+  # A rebase detaches HEAD; the branch being rebased is recorded in head-name.
+  for state in rebase-merge rebase-apply; do
+    file=$(_pingo_pull_git rev-parse --git-path "$state/head-name" 2>/dev/null)
+    case "$file" in /* | [A-Za-z]:*) ;; *) file=$1/$file ;; esac
+    [ -f "$file" ] && [ "$(cat "$file")" = "refs/heads/$db" ] &&
+      { _pingo_pull_skip REBASING; return; }
+  done
+  if [ "$head" != "refs/heads/$db" ]; then
+    # Not checked out here: git won't move a branch checked out elsewhere.
+    case "$_PINGO_NL$(_pingo_pull_git worktree list --porcelain 2>/dev/null)$_PINGO_NL" in
+      *"${_PINGO_NL}branch refs/heads/$db$_PINGO_NL"*) _pingo_pull_skip WORKTREE; return ;;
+    esac
+  else
+    _pingo_pull_git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 &&
+      { _pingo_pull_skip MERGING; return; }
+    # Tracked changes, staged or not, would be at risk; untracked files are not.
+    _pingo_pull_git diff --quiet >/dev/null 2>&1 &&
+      _pingo_pull_git diff --cached --quiet >/dev/null 2>&1 ||
+      { _pingo_pull_skip DIRTY; return; }
+  fi
+
+  old=$(_pingo_pull_git rev-parse -q --verify "refs/heads/$db" 2>/dev/null)
+  if [ "$head" = "refs/heads/$db" ]; then
+    err=$(_pingo_pull_git -c pull.rebase=false pull -q --ff-only --no-rebase "$remote" "$db" 2>&1 >/dev/null) ||
+      { _pingo_pull_failed "$err"; return; }
+    # git calls a local branch ahead of the remote "up to date"; for Pull it
+    # has diverged, as on the fetch path below.
+    _pingo_pull_git merge-base --is-ancestor "refs/heads/$db" FETCH_HEAD >/dev/null 2>&1 ||
+      { _pingo_pull_fail DIVERGED; return; }
+  else
+    # Fetching straight into the local ref only accepts fast-forwards.
+    # No -q: it would also silence why a fetch was rejected.
+    err=$(_pingo_pull_git fetch "$remote" "$db:$db" 2>&1 >/dev/null) ||
+      { _pingo_pull_failed "$err"; return; }
+  fi
+  new=$(_pingo_pull_git rev-parse -q --verify "refs/heads/$db" 2>/dev/null)
+
+  if [ "$old" = "$new" ]; then
+    _PINGO_PULL_RES=current
+    return 0
+  fi
+  _PINGO_PULL_RES=updated
+  _PINGO_PULL_COUNT=$(_pingo_pull_git rev-list --count "$old..$new" 2>/dev/null)
+  _PINGO_PULL_OLD=$(_pingo_pull_git rev-parse --short "$old" 2>/dev/null)
+  _PINGO_PULL_NEW=$(_pingo_pull_git rev-parse --short "$new" 2>/dev/null)
+  return 0
+}
+
+# Translated reason of the last skipped/failed Pull -> $_PINGO_M.
+_pingo_pull_why() { _pingo_fmt "PULL_WHY_$_PINGO_PULL_REASON"; }
+
+# Result line of the last Pull of <name> -> $_PINGO_M, and its output level
+# (ok warn fail, see _pingo_mark) -> $_PINGO_PULL_LEVEL.
+_pingo_pull_result() {
+  case "$_PINGO_PULL_RES" in
+    updated)
+      if [ "$_PINGO_PULL_COUNT" = 1 ]; then
+        _pingo_fmt PULL_UPDATED_ONE "$1" "$_PINGO_PULL_BRANCH" "$_PINGO_PULL_OLD" "$_PINGO_PULL_NEW"
+      else
+        _pingo_fmt PULL_UPDATED_MANY "$1" "$_PINGO_PULL_BRANCH" "$_PINGO_PULL_COUNT" "$_PINGO_PULL_OLD" "$_PINGO_PULL_NEW"
+      fi
+      _PINGO_PULL_LEVEL=ok
+      ;;
+    current)
+      _pingo_fmt PULL_CURRENT "$1" "$_PINGO_PULL_BRANCH"
+      _PINGO_PULL_LEVEL=ok
+      ;;
+    skipped)
+      _pingo_pull_why
+      _pingo_fmt PULL_SKIPPED "$1" "$_PINGO_M"
+      _PINGO_PULL_LEVEL=warn
+      ;;
+    *)
+      _pingo_pull_why
+      _pingo_fmt PULL_FAILED "$1" "$_PINGO_M"
+      _PINGO_PULL_LEVEL=fail
+      ;;
+  esac
+}
+
+# Prints the result line of the last Pull of <name>.
+_pingo_pull_report() {
+  _pingo_pull_result "$1"
+  "_pingo_$_PINGO_PULL_LEVEL" "$_PINGO_M"
+}
+
+# Pulls every Repository in list order: one result line each, then a summary
+# (counts + the result line of each skip/failure again). Shared by `pingo pull`
+# and the menu. Returns 1 iff at least one Repository failed; skips don't count.
+_pingo_pull_all() {
+  local i=1 up=0 cur=0 sk=0 fl=0 notes=
+  _pingo_require_git || return 1
+  _pingo_load
+  if [ "$_PINGO_N" -eq 0 ]; then
+    _pingo_empty_hint
+    return 0
+  fi
+  while [ "$i" -le "$_PINGO_N" ]; do
+    _pingo_get "$i"
+    _pingo_pull_one "$_PINGO_P"
+    _pingo_pull_report "$_PINGO_NAME"
+    case "$_PINGO_PULL_RES" in
+      updated) up=$((up + 1)) ;;
+      current) cur=$((cur + 1)) ;;
+      skipped) sk=$((sk + 1)) ;;
+      *) fl=$((fl + 1)) ;;
+    esac
+    if [ "$_PINGO_PULL_LEVEL" != ok ]; then
+      _pingo_mark "$_PINGO_PULL_LEVEL"
+      notes="$notes  $_PINGO_MARK $_PINGO_M$_PINGO_NL"
+    fi
+    i=$((i + 1))
+  done
+  _pingo_fmt PULL_SUMMARY "$up" "$cur" "$sk" "$fl"
+  printf '\n%s%s%s\n%s' "${_C_B}" "$_PINGO_M" "${_C_R}" "$notes"
+  [ "$fl" -eq 0 ]
+}
+
+# Registered Repository containing the current directory -> $_PINGO_IDX.
+# The deepest match wins. Compares the logical path first and the physical
+# one (pwd -P) as a fallback, so symlinked paths still match.
+_pingo_resolve_here() {
+  local i=1 best=0 bestlen=0 here phys key pkey rkey len
+  _PINGO_IDX=
+  _pingo_normpath "$PWD" || _PINGO_NP=$PWD
+  _pingo_pathkey "$_PINGO_NP"
+  here=$_PINGO_PK
+  phys=$(pwd -P 2>/dev/null) || phys=$PWD
+  _pingo_normpath "$phys" && phys=$_PINGO_NP
+  _pingo_pathkey "$phys"
+  pkey=$_PINGO_PK
+  while [ "$i" -le "$_PINGO_N" ]; do
+    _pingo_get "$i"
+    _pingo_pathkey "$_PINGO_P"
+    rkey=$_PINGO_PK
+    key=$here
+    case "$here/" in
+      "${rkey%/}/"*) ;;
+      *)
+        key=
+        if [ -d "$_PINGO_P" ]; then
+          rkey=$(CDPATH= _pingo_cd_quiet "$_PINGO_P" && pwd -P 2>/dev/null) || rkey=
+          if [ -n "$rkey" ] && _pingo_normpath "$rkey"; then
+            _pingo_pathkey "$_PINGO_NP"
+            rkey=$_PINGO_PK
+            case "$pkey/" in "${rkey%/}/"*) key=$pkey ;; esac
+          fi
+        fi
+        ;;
+    esac
+    if [ -n "$key" ]; then
+      len=${#rkey}
+      if [ "$len" -gt "$bestlen" ]; then
+        best=$i
+        bestlen=$len
+      fi
+    fi
+    i=$((i + 1))
+  done
+  if [ "$best" -gt 0 ]; then
+    _PINGO_IDX=$best
+    return 0
+  fi
+  _pingo_tilde "$PWD"
+  _pingo_fmt ERR_NOT_IN_REPO "$_PINGO_TL"
+  return 1
+}
+
+_pingo_cmd_pull() {
+  if [ $# -eq 0 ]; then
+    _pingo_pull_all
+    return
+  fi
+  if [ $# -ne 1 ]; then
+    _pingo_fmt USAGE "pingo pull [n|alias|.]"
+    _pingo_fail "$_PINGO_M"
+    return 2
+  fi
+  _pingo_require_git || return 1
+  _pingo_load
+  if [ "$1" = . ]; then
+    _pingo_resolve_here
+  else
+    _pingo_resolve "$1"
+  fi || {
+    _pingo_fail "$_PINGO_M"
+    return 1
+  }
+  _pingo_get "$_PINGO_IDX"
+  _pingo_pull_one "$_PINGO_P"
+  _pingo_pull_report "$_PINGO_NAME"
+  [ "$_PINGO_PULL_RES" = updated ] || [ "$_PINGO_PULL_RES" = current ]
 }
 
 _pingo_help_line() { # command description
@@ -972,6 +1264,8 @@ _pingo_cmd_help() {
   _pingo_fmt HELP_PRUNE;   _pingo_help_line "pingo prune" "$_PINGO_M"
   _pingo_fmt HELP_CONFIG;  _pingo_help_line "pingo config" "$_PINGO_M"
   _pingo_fmt HELP_LANG;    _pingo_help_line "pingo config lang [code]" "$_PINGO_M"
+  _pingo_fmt HELP_PULL;    _pingo_help_line "pingo pull [n|alias]" "$_PINGO_M"
+  _pingo_fmt HELP_PULL_HERE; _pingo_help_line "pingo pull ." "$_PINGO_M"
   _pingo_fmt HELP_UPDATE;  _pingo_help_line "pingo update" "$_PINGO_M"
   _pingo_fmt HELP_HELP;    _pingo_help_line "pingo help" "$_PINGO_M"
   _pingo_fmt HELP_VERSION; _pingo_help_line "pingo --version" "$_PINGO_M"
@@ -990,6 +1284,8 @@ _pingo_help_keys() {
   _pingo_fmt KEY_REMOVE;   _pingo_help_line "d" "$_PINGO_M"
   _pingo_fmt KEY_MOVE;     _pingo_help_line "m" "$_PINGO_M"
   _pingo_fmt KEY_RENAME;   _pingo_help_line "r" "$_PINGO_M"
+  _pingo_fmt KEY_PULL;     _pingo_help_line "p" "$_PINGO_M"
+  _pingo_fmt KEY_PULL_ALL; _pingo_help_line "P" "$_PINGO_M"
   _pingo_fmt KEY_SETTINGS; _pingo_help_line "s" "$_PINGO_M"
   _pingo_fmt KEY_HELP;     _pingo_help_line "?" "$_PINGO_M"
   _pingo_fmt KEY_QUIT;     _pingo_help_line "q  Esc" "$_PINGO_M"
@@ -1155,6 +1451,8 @@ _pingo_draw() {
     _pingo_fk "a" F_ADD
     _pingo_fk "d" F_REMOVE
     _pingo_fk "m" F_MOVE
+    _pingo_fk "p" F_PULL
+    _pingo_fk "P" F_PULL_ALL
     _pingo_fk "s" F_SETTINGS
     _pingo_fk "?" F_HELP
     _pingo_fk "q" F_QUIT
@@ -1268,6 +1566,52 @@ _pingo_menu_help() {
   _pingo_fmt PRESS_ANY_KEY
   printf '%s\n  %s%s%s%s\n\033[J' "$el" "${_C_D}" "$_PINGO_M" "${_C_R}" "$el"
   _pingo_readkey || return 1
+  return 0
+}
+
+# Sets $msg (dynamic scope) to "git not found" when git is missing.
+_pingo_menu_need_git() {
+  _pingo_require_git -q && return 0
+  _pingo_mark fail
+  msg="$_PINGO_MARK $_PINGO_M"
+  return 1
+}
+
+# p: Pull the selected Repository without leaving the menu. The message line
+# shows the indicator, then the result. Uses (dynamic scope) sel msg.
+_pingo_menu_pull() {
+  local name dir
+  [ "$_PINGO_N" -gt 0 ] || return 0
+  _pingo_menu_need_git || return 0
+  _pingo_get "$sel"
+  name=$_PINGO_NAME dir=$_PINGO_P
+  _pingo_fmt PULLING "$name"
+  _pingo_mark info
+  msg="$_PINGO_MARK $_PINGO_M"
+  _pingo_draw
+  _pingo_pull_one "$dir"
+  _pingo_pull_result "$name"
+  _pingo_mark "$_PINGO_PULL_LEVEL"
+  msg="$_PINGO_MARK $_PINGO_M"
+}
+
+# P: Pull every Repository outside the alternate screen, with the same output
+# as `pingo pull`, then wait for Enter (or q/Esc) and come back to the menu.
+_pingo_menu_pull_all() {
+  _pingo_menu_need_git || return 0
+  _pingo_tui_leave
+  printf '\n'
+  _pingo_pull_all
+  _pingo_fmt PRESS_ENTER
+  printf '\n  %s%s%s\n' "${_C_D}" "$_PINGO_M" "${_C_R}"
+  while :; do
+    _pingo_readkey || return 1
+    case "$_PINGO_KEY:$_PINGO_C" in
+      enter:* | esc:* | char:q | char:Q) break ;;
+      quit:*) return 1 ;;
+    esac
+  done
+  _pingo_tui_enter
   return 0
 }
 
@@ -1425,6 +1769,8 @@ _pingo_menu() {
             fi
             ;;
           s | S) _pingo_menu_settings || break ;;
+          p) _pingo_menu_pull ;;
+          P) _pingo_menu_pull_all || break ;;
           '?' | h | H) _pingo_menu_help || break ;;
         esac
         ;;
@@ -1464,6 +1810,7 @@ pingo() {
     prune) _pingo_cmd_prune ;;
     config) shift; _pingo_cmd_config "$@" ;;
     update) _pingo_cmd_update ;;
+    pull) shift; _pingo_cmd_pull "$@" ;;
     help | -h | --help) _pingo_cmd_help ;;
     version | -v | -V | --version) printf 'pingo %s\n' "$PINGO_VERSION" ;;
     -*)
@@ -1480,7 +1827,7 @@ _pingo_completion_words() {
   local i=1
   _pingo_init
   _pingo_load
-  printf '%s\n' ls add rm mv rename prune config update help
+  printf '%s\n' ls add rm mv rename prune config update pull help
   while [ "$i" -le "$_PINGO_N" ]; do
     _pingo_get "$i"
     printf '%s\n' "$_PINGO_NAME"
@@ -1497,6 +1844,12 @@ _pingo_completion_names() {
     printf '%s\n' "$_PINGO_NAME"
     i=$((i + 1))
   done
+}
+
+# Words offered after "pingo pull": "." (current Repository) plus names.
+_pingo_completion_pull() {
+  printf '%s\n' .
+  _pingo_completion_names
 }
 
 # --- tab completion -----------------------------------------------------------------

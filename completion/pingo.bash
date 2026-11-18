@@ -11,6 +11,9 @@ _pingo_bash_complete() {
       rm | remove | rename)
         [ "$COMP_CWORD" -eq 2 ] && words=$(_pingo_completion_names)
         ;;
+      pull)
+        [ "$COMP_CWORD" -eq 2 ] && words=$(_pingo_completion_pull)
+        ;;
       mv | move)
         [ "$COMP_CWORD" -eq 2 ] && words=$(_pingo_completion_names)
         ;;

@@ -15,6 +15,12 @@ _pingo_zsh_complete() {
         compadd -a items
       fi
       ;;
+    pull)
+      if (( CURRENT == 3 )); then
+        items=(${(f)"$(_pingo_completion_pull)"})
+        compadd -a items
+      fi
+      ;;
     add)
       (( CURRENT == 3 )) && _files -/
       ;;

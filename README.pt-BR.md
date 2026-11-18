@@ -21,7 +21,7 @@ Shell puro · zero dependências · zsh e bash · macOS, Linux e Windows (Git Ba
     4  dotfiles  ~/dotfiles           ⎇ master
     5  old-proj  ~/old/proj           ✗ não encontrado
 
-  ⏎ abrir   a adicionar   d remover   m mover   s config   ? ajuda   q sair
+  ⏎ abrir   a adicionar   d remover   m mover   p pull   P pull geral   s config   ? ajuda   q sair
 ```
 
 Digite `pingo`, escolha o repositório com as setas, aperte Enter: pronto, você está lá.
@@ -32,11 +32,13 @@ Ou pule o menu com `pingo api` ou `pingo 2`.
 - **Menu interativo** com setas (ou `j`/`k`), salto por número e atalhos para adicionar, remover, reordenar e renomear.
 - **Atalhos diretos**: `pingo <alias>`, `pingo <nome-da-pasta>` ou `pingo <posição>`.
 - **A sua ordem**: a lista aparece na ordem que você escolher. Reordene com `m` no menu ou com `pingo mv`.
+- **Pull**: `pingo pull` traz a branch padrão de cada repositório em dia com o remoto, só por fast-forward, sem trocar a branch em que você está (`p`/`P` no menu).
 - **Branch atual** ao lado de cada repositório, lida direto do `.git/HEAD` (instantâneo, inclusive no Windows).
 - **Repositórios inexistentes** aparecem em vermelho; `pingo prune` remove todos.
 - **Inglês e Português (Brasil)**, detectados pelo sistema. Qualquer outro idioma com um único arquivo.
 - **Autocompletar com Tab** no zsh e no bash.
 - **Shell puro**: só builtins do bash/zsh. Funciona no zsh ≥ 5 e no bash ≥ 3.2.
+  (`pingo pull` e `pingo update` usam o `git`, que precisa estar instalado.)
 
 ## Instalação
 
@@ -104,6 +106,9 @@ usar qualquer comando.
 | `pingo prune`                    | remove repositórios que não existem mais        |
 | `pingo config`                   | mostra configurações e locais dos arquivos      |
 | `pingo config lang [código]`     | lista os idiomas ou troca o idioma              |
+| `pingo pull`                     | faz o pull de todos (veja [Pull](#pull))        |
+| `pingo pull <n\|alias>`          | faz o pull de um repositório                    |
+| `pingo pull .`                   | faz o pull do repositório em que você está      |
 | `pingo update`                   | atualiza o pingo (`git pull` na instalação)     |
 | `pingo help`, `pingo --version`  | ajuda e versão                                  |
 
@@ -118,9 +123,58 @@ usar qualquer comando.
 | `d`                      | remover o selecionado (pede confirmação)         |
 | `m`                      | mover: pega o item, use `↑` `↓`, solte com Enter |
 | `r`                      | renomear (alterar alias)                         |
+| `p`                      | fazer o pull do repositório selecionado          |
+| `P`                      | fazer o pull de todos e voltar ao menu (Enter, `q` ou `Esc`) |
 | `s`                      | configurações (idioma)                           |
 | `?`                      | ajuda                                            |
 | `q` / `Esc`              | sair                                             |
+
+### Pull
+
+`pingo pull` traz a **branch padrão** de um repositório (a branch que o remoto
+declara como linha principal, normalmente `main` ou `master`) em dia com o
+remoto. Pode rodar sem medo:
+
+- **Só fast-forward.** O pingo nunca faz merge, rebase, stash nem cria commits.
+  Se a sua branch padrão local tem commits que o remoto não tem (mesmo sem
+  nada novo no remoto), ele avisa *divergiu* e deixa a resolução com você.
+- **Nunca troca o seu checkout.** Numa branch de feature (ou com HEAD destacado),
+  a branch padrão é atualizada sem checkout; sua branch e sua árvore de trabalho
+  ficam intactas, mesmo com mudanças não commitadas. Se a branch padrão *é* a
+  que está em uso, ela avança ali mesmo.
+- **Nunca muda o seu diretório.** `pingo pull api` não leva você até `api`.
+- **Nunca trava num prompt.** Um remoto que exige credenciais falha na hora.
+  O SSH roda com `BatchMode=yes` (sem perguntar passphrase nem host key; chaves
+  num agente continuam funcionando), a menos que você defina o seu próprio
+  `GIT_SSH_COMMAND`, `GIT_SSH` ou `core.sshCommand`.
+
+A branch padrão é o HEAD declarado pelo remoto; senão uma `main` local; senão
+uma `master` local; ela precisa existir localmente (o Pull nunca cria
+branches). O remoto é o upstream da branch; senão o `origin`.
+
+```sh
+pingo pull          # todos os repositórios, na ordem da lista, e um resumo
+pingo pull api      # um só, por alias, nome da pasta ou posição
+pingo api && pingo pull .   # o repositório cadastrado em que você está (qualquer subpasta)
+```
+
+Cada repositório ganha uma linha: *atualizado* (com o número de commits e os
+hashes antigo → novo), *já em dia*, *ignorado* ou *falhou*, com o motivo:
+
+| Ignorado (nada foi tocado)                            | Falhou (o git recusou ou deu erro) |
+|-------------------------------------------------------|------------------------------------|
+| diretório não encontrado                              | divergiu                           |
+| não é um repositório git                              | remoto inacessível                 |
+| sem remoto                                            | autenticação necessária            |
+| nenhuma branch padrão encontrada                      | erro do git                        |
+| mudanças não commitadas (na branch padrão em uso)     |                                    |
+| merge / rebase em andamento                           |                                    |
+| branch padrão em uso em outro worktree                |                                    |
+
+Arquivos não rastreados nunca fazem o repositório ser ignorado. `pingo pull`
+sai com `1` só se algum repositório falhou (ignorados são estados esperados);
+`pingo pull <n|alias|.>` sai com `1` se aquele repositório falhou **ou** foi
+ignorado.
 
 ### Aliases e caminhos
 
