@@ -997,7 +997,7 @@ _pingo_pull_failed() {
 #   _PINGO_PULL_OLD/NEW short hashes before/after (updated)
 # Prints nothing. Returns 0 for updated/current, 1 otherwise.
 _pingo_pull_one() {
-  local db= remote= head= old= new= ref= f=
+  local db= remote= head= old= new= err= state= file=
   _PINGO_PULL_DIR=$1 _PINGO_PULL_RES=failed _PINGO_PULL_REASON=ERROR _PINGO_PULL_BRANCH=
   _PINGO_PULL_COUNT=0 _PINGO_PULL_OLD= _PINGO_PULL_NEW=
 
@@ -1007,18 +1007,16 @@ _pingo_pull_one() {
   [ -e "$1/.git" ] && _pingo_pull_git rev-parse -q --git-dir >/dev/null 2>&1 ||
     { _pingo_pull_skip NOT_GIT; return; }
 
-  # Default branch: the remote's declared HEAD, else main, else master.
-  ref=$(_pingo_pull_git symbolic-ref -q refs/remotes/origin/HEAD 2>/dev/null)
-  if [ -n "$ref" ]; then
-    db=${ref#refs/remotes/origin/}
-  elif _pingo_pull_git show-ref -q --verify refs/heads/main 2>/dev/null; then
+  # Default branch: the remote's declared HEAD, else main, else master. It must
+  # exist locally: Pull never creates branches.
+  db=$(_pingo_pull_git symbolic-ref -q refs/remotes/origin/HEAD 2>/dev/null)
+  db=${db#refs/remotes/origin/}
+  if [ -z "$db" ]; then
     db=main
-  elif _pingo_pull_git show-ref -q --verify refs/heads/master 2>/dev/null; then
-    db=master
-  else
-    _pingo_pull_skip NO_BRANCH
-    return
+    _pingo_pull_git show-ref -q --verify refs/heads/main 2>/dev/null || db=master
   fi
+  _pingo_pull_git show-ref -q --verify "refs/heads/$db" 2>/dev/null ||
+    { _pingo_pull_skip NO_BRANCH; return; }
   _PINGO_PULL_BRANCH=$db
 
   # Remote: the Default branch's upstream, else origin.
@@ -1029,10 +1027,10 @@ _pingo_pull_one() {
 
   head=$(_pingo_pull_git symbolic-ref -q HEAD 2>/dev/null)
   # A rebase detaches HEAD; the branch being rebased is recorded in head-name.
-  for f in rebase-merge rebase-apply; do
-    f=$(_pingo_pull_git rev-parse --git-path "$f/head-name" 2>/dev/null)
-    case "$f" in /* | [A-Za-z]:*) ;; *) f=$1/$f ;; esac
-    [ -f "$f" ] && [ "$(cat "$f")" = "refs/heads/$db" ] &&
+  for state in rebase-merge rebase-apply; do
+    file=$(_pingo_pull_git rev-parse --git-path "$state/head-name" 2>/dev/null)
+    case "$file" in /* | [A-Za-z]:*) ;; *) file=$1/$file ;; esac
+    [ -f "$file" ] && [ "$(cat "$file")" = "refs/heads/$db" ] &&
       { _pingo_pull_skip REBASING; return; }
   done
   if [ "$head" != "refs/heads/$db" ]; then
@@ -1051,13 +1049,17 @@ _pingo_pull_one() {
 
   old=$(_pingo_pull_git rev-parse -q --verify "refs/heads/$db" 2>/dev/null)
   if [ "$head" = "refs/heads/$db" ]; then
-    ref=$(_pingo_pull_git -c pull.rebase=false pull -q --ff-only --no-rebase "$remote" "$db" 2>&1 >/dev/null) ||
-      { _pingo_pull_failed "$ref"; return; }
+    err=$(_pingo_pull_git -c pull.rebase=false pull -q --ff-only --no-rebase "$remote" "$db" 2>&1 >/dev/null) ||
+      { _pingo_pull_failed "$err"; return; }
+    # git calls a local branch ahead of the remote "up to date"; for Pull it
+    # has diverged, as on the fetch path below.
+    _pingo_pull_git merge-base --is-ancestor "refs/heads/$db" FETCH_HEAD >/dev/null 2>&1 ||
+      { _pingo_pull_fail DIVERGED; return; }
   else
     # Fetching straight into the local ref only accepts fast-forwards.
     # No -q: it would also silence why a fetch was rejected.
-    ref=$(_pingo_pull_git fetch "$remote" "$db:$db" 2>&1 >/dev/null) ||
-      { _pingo_pull_failed "$ref"; return; }
+    err=$(_pingo_pull_git fetch "$remote" "$db:$db" 2>&1 >/dev/null) ||
+      { _pingo_pull_failed "$err"; return; }
   fi
   new=$(_pingo_pull_git rev-parse -q --verify "refs/heads/$db" 2>/dev/null)
 
@@ -1066,12 +1068,8 @@ _pingo_pull_one() {
     return 0
   fi
   _PINGO_PULL_RES=updated
-  if [ -n "$old" ]; then
-    _PINGO_PULL_COUNT=$(_pingo_pull_git rev-list --count "$old..$new" 2>/dev/null)
-    _PINGO_PULL_OLD=$(_pingo_pull_git rev-parse --short "$old" 2>/dev/null)
-  else
-    _PINGO_PULL_COUNT=$(_pingo_pull_git rev-list --count "$new" 2>/dev/null)
-  fi
+  _PINGO_PULL_COUNT=$(_pingo_pull_git rev-list --count "$old..$new" 2>/dev/null)
+  _PINGO_PULL_OLD=$(_pingo_pull_git rev-parse --short "$old" 2>/dev/null)
   _PINGO_PULL_NEW=$(_pingo_pull_git rev-parse --short "$new" 2>/dev/null)
   return 0
 }

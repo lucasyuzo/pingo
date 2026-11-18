@@ -73,6 +73,20 @@ assert_status $st 1 "no Default branch: exit 1"
 assert_contains "$out" "dev: skipped (no default branch found)" "no Default branch: skipped with reason"
 assert_eq "$(t_snap "$T_TMP/work/dev")" "$before" "no Default branch: git state unchanged"
 
+# The remote declares a Default branch that has no local branch: Pull never
+# creates branches, so this is skipped too (no fallback to another branch).
+t_git_repo "$T_TMP/work/nolocal"
+t_git -C "$T_TMP/work/nolocal" checkout -q -b feat
+t_git -C "$T_TMP/work/nolocal" branch -D main
+t_git -C "$T_TMP/work/nolocal" branch master
+pingo add "$T_TMP/work/nolocal" >/dev/null 2>&1
+t_git_advance "$T_TMP/work/nolocal" 1
+before=$(t_snap "$T_TMP/work/nolocal")
+out=$(pingo pull nolocal 2>&1); st=$?
+assert_status $st 1 "declared Default branch missing locally: exit 1"
+assert_contains "$out" "nolocal: skipped (no default branch found)" "declared Default branch missing locally: skipped"
+assert_eq "$(t_snap "$T_TMP/work/nolocal")" "$before" "declared Default branch missing locally: no branch created"
+
 # --- checkout is the Default branch with tracked uncommitted changes ---
 t_git_repo "$T_TMP/work/dirty"
 pingo add "$T_TMP/work/dirty" >/dev/null 2>&1
@@ -204,6 +218,25 @@ out=$(pingo pull div 2>&1); st=$?
 assert_status $st 1 "diverged from a feature branch: exit 1"
 assert_contains "$out" "div: pull failed (diverged)" "diverged from a feature branch: failed with reason"
 assert_eq "$(t_local "$T_TMP/work/div")" "$before" "diverged from a feature branch: local state unchanged"
+
+# ahead: the local Default branch has commits the remote doesn't (story 13)
+t_git_repo "$T_TMP/work/ahead"
+pingo add "$T_TMP/work/ahead" >/dev/null 2>&1
+printf 'mine\n' >"$T_TMP/work/ahead/mine"
+t_git -C "$T_TMP/work/ahead" add mine
+t_git -C "$T_TMP/work/ahead" commit -q -m mine
+before=$(t_local "$T_TMP/work/ahead")
+out=$(pingo pull ahead 2>&1); st=$?
+assert_status $st 1 "ahead: exit 1"
+assert_contains "$out" "ahead: pull failed (diverged)" "ahead: failed as diverged"
+assert_eq "$(t_local "$T_TMP/work/ahead")" "$before" "ahead: local state unchanged"
+
+t_git -C "$T_TMP/work/ahead" checkout -q -b feat
+before=$(t_local "$T_TMP/work/ahead")
+out=$(pingo pull ahead 2>&1); st=$?
+assert_status $st 1 "ahead from a feature branch: exit 1"
+assert_contains "$out" "ahead: pull failed (diverged)" "ahead from a feature branch: failed as diverged"
+assert_eq "$(t_local "$T_TMP/work/ahead")" "$before" "ahead from a feature branch: local state unchanged"
 
 # unreachable remote: a path that is gone, and a closed local port
 t_git_repo "$T_TMP/work/far"
