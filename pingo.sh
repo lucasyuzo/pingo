@@ -965,8 +965,21 @@ _pingo_pull_git() {
   # No askpass either (IDEs set GIT_ASKPASS): credential prompts fail instead of
   # stalling; SSH agent keys still work. LC_ALL=C: failures are classified by
   # git's untranslated messages.
-  LC_ALL=C GIT_TERMINAL_PROMPT=0 GIT_ASKPASS= SSH_ASKPASS= \
-    git -C "$_PINGO_PULL_DIR" -c core.askPass= "$@"
+  # SSH in batch mode too (no host key or passphrase prompts on the tty),
+  # unless the user chose their own ssh command. Checked once per Pull.
+  if [ -z "$_PINGO_PULL_SSH" ]; then
+    _PINGO_PULL_SSH=own
+    [ -z "${GIT_SSH_COMMAND:-}" ] && [ -z "${GIT_SSH:-}" ] &&
+      [ -z "$(git -C "$_PINGO_PULL_DIR" config --get core.sshCommand 2>/dev/null)" ] &&
+      _PINGO_PULL_SSH=batch
+  fi
+  if [ "$_PINGO_PULL_SSH" = batch ]; then
+    LC_ALL=C GIT_TERMINAL_PROMPT=0 GIT_ASKPASS= SSH_ASKPASS= GIT_SSH_COMMAND='ssh -o BatchMode=yes' \
+      git -C "$_PINGO_PULL_DIR" -c core.askPass= "$@"
+  else
+    LC_ALL=C GIT_TERMINAL_PROMPT=0 GIT_ASKPASS= SSH_ASKPASS= \
+      git -C "$_PINGO_PULL_DIR" -c core.askPass= "$@"
+  fi
 }
 
 # Ends the Pull with a result and reason (see _pingo_pull_one); returns 1.
@@ -978,7 +991,7 @@ _pingo_pull_failed() {
   case "$1" in
     *"non-fast-forward"* | *"Not possible to fast-forward"* | *"fast-forwarded"*) _pingo_pull_fail DIVERGED ;;
     *"terminal prompts disabled"* | *"could not read Username"* | *"could not read Password"* | \
-      *"Authentication failed"* | *"Permission denied"*)
+      *"Authentication failed"* | *"Permission denied"* | *"Host key verification failed"*)
       _pingo_pull_fail AUTH ;;
     *"Could not read from remote"* | *"does not appear to be a git repository"* | \
       *"unable to access"* | *"Could not resolve"* | *"Failed to connect"* | \
@@ -998,7 +1011,7 @@ _pingo_pull_failed() {
 # Prints nothing. Returns 0 for updated/current, 1 otherwise.
 _pingo_pull_one() {
   local db= remote= head= old= new= err= state= file=
-  _PINGO_PULL_DIR=$1 _PINGO_PULL_RES=failed _PINGO_PULL_REASON=ERROR _PINGO_PULL_BRANCH=
+  _PINGO_PULL_DIR=$1 _PINGO_PULL_SSH= _PINGO_PULL_RES=failed _PINGO_PULL_REASON=ERROR _PINGO_PULL_BRANCH=
   _PINGO_PULL_COUNT=0 _PINGO_PULL_OLD= _PINGO_PULL_NEW=
 
   # Pre-checks: anything that can't be pulled safely is skipped, untouched.

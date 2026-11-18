@@ -288,6 +288,45 @@ assert_contains "$out" "locked: pull failed (authentication required)" "authenti
 [ -e "$T_TMP/asked" ]; assert_status $? 1 "authentication required: askpass never invoked"
 unset GIT_ASKPASS SSH_ASKPASS
 
+# SSH: never prompts (host key, passphrase) unless the user chose their own
+# ssh command. A fake ssh on PATH logs its arguments and refuses the host key.
+unset GIT_SSH_COMMAND GIT_SSH
+mkdir -p "$T_TMP/sshbin"
+for prog in ssh myssh; do
+  cat >"$T_TMP/sshbin/$prog" <<SH
+#!/bin/sh
+printf '%s\n' "\$*" >>"$T_TMP/$prog.log"
+echo "Host key verification failed." >&2
+exit 255
+SH
+  chmod +x "$T_TMP/sshbin/$prog"
+done
+t_git_repo "$T_TMP/work/sshy"
+pingo add "$T_TMP/work/sshy" >/dev/null 2>&1
+t_git -C "$T_TMP/work/sshy" remote set-url origin "ssh://git@example.invalid/repo.git"
+before=$(t_snap "$T_TMP/work/sshy")
+out=$(PATH="$T_TMP/sshbin:$PATH"; pingo pull sshy 2>&1 </dev/null); st=$?
+assert_status $st 1 "ssh host key refused: exit 1"
+assert_contains "$out" "sshy: pull failed (authentication required)" "ssh host key refused: authentication required"
+assert_contains "$(cat "$T_TMP/ssh.log" 2>/dev/null)" "BatchMode=yes" "ssh runs in batch mode"
+assert_eq "$(t_snap "$T_TMP/work/sshy")" "$before" "ssh host key refused: git state unchanged"
+
+rm -f "$T_TMP/ssh.log" "$T_TMP/myssh.log"
+out=$(PATH="$T_TMP/sshbin:$PATH"; GIT_SSH_COMMAND=myssh; export GIT_SSH_COMMAND; pingo pull sshy 2>&1 </dev/null)
+assert_contains "$(cat "$T_TMP/myssh.log" 2>/dev/null)" "example.invalid" "GIT_SSH_COMMAND is respected"
+assert_not_contains "$(cat "$T_TMP/myssh.log" 2>/dev/null)" "BatchMode" "GIT_SSH_COMMAND is left as is"
+
+rm -f "$T_TMP/ssh.log" "$T_TMP/myssh.log"
+out=$(PATH="$T_TMP/sshbin:$PATH"; GIT_SSH="$T_TMP/sshbin/myssh"; export GIT_SSH; pingo pull sshy 2>&1 </dev/null)
+assert_contains "$(cat "$T_TMP/myssh.log" 2>/dev/null)" "example.invalid" "GIT_SSH is respected"
+assert_not_contains "$(cat "$T_TMP/myssh.log" 2>/dev/null)" "BatchMode" "GIT_SSH is left as is"
+
+rm -f "$T_TMP/ssh.log" "$T_TMP/myssh.log"
+t_git -C "$T_TMP/work/sshy" config core.sshCommand myssh
+out=$(PATH="$T_TMP/sshbin:$PATH"; pingo pull sshy 2>&1 </dev/null)
+assert_contains "$(cat "$T_TMP/myssh.log" 2>/dev/null)" "example.invalid" "core.sshCommand is respected"
+assert_not_contains "$(cat "$T_TMP/myssh.log" 2>/dev/null)" "BatchMode" "core.sshCommand is left as is"
+
 # --- pt-BR ---
 out=$(LANG=pt_BR.UTF-8 pingo pull dirty 2>&1)
 assert_contains "$out" "dirty: ignorado (mudanças não commitadas)" "pt-BR: skipped with reason"
