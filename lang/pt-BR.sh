@@ -44,6 +44,7 @@ PINGO_MSG_HINT_PRUNE='Rode "pingo prune" para remover repositórios inexistentes
 PINGO_MSG_ERR_UNKNOWN_LANG='Idioma desconhecido "%s". Rode pingo config lang para ver os disponíveis.'
 PINGO_MSG_ERR_NO_GIT='git não encontrado; instale-o e tente novamente.'
 PINGO_MSG_ERR_NOT_CLONE='%s não é um clone git; atualize manualmente.'
+PINGO_MSG_ERR_NOT_IN_REPO='%s não está dentro de um repositório registrado. Rode pingo ls para ver a lista.'
 
 # --- atualização -------------------------------------------------------------------
 PINGO_MSG_UPDATING='Atualizando o pingo…'
@@ -78,6 +79,7 @@ PINGO_MSG_HELP_PRUNE='remove repositórios que não existem mais'
 PINGO_MSG_HELP_CONFIG='mostra configurações e locais dos arquivos'
 PINGO_MSG_HELP_LANG='lista os idiomas ou troca o idioma'
 PINGO_MSG_HELP_PULL='traz a branch padrão em dia com o remoto'
+PINGO_MSG_HELP_PULL_HERE='faz o pull do repositório registrado em que você está'
 PINGO_MSG_HELP_UPDATE='atualiza o pingo para a versão mais recente'
 PINGO_MSG_HELP_HELP='mostra esta ajuda'
 PINGO_MSG_HELP_VERSION='mostra a versão'
