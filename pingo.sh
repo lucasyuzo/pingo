@@ -1107,18 +1107,118 @@ _pingo_pull_report() {
   esac
 }
 
+# Pulls every Repository in list order: one result line each, then a summary
+# (counts + the reason for each skip/failure). Shared by `pingo pull` and the
+# menu. Returns 1 iff at least one Repository failed; skips don't count.
+_pingo_pull_all() {
+  local i=1 up=0 cur=0 sk=0 fl=0 notes= key= reason=
+  _pingo_require_git || return 1
+  _pingo_load
+  if [ "$_PINGO_N" -eq 0 ]; then
+    _pingo_empty_hint
+    return 0
+  fi
+  while [ "$i" -le "$_PINGO_N" ]; do
+    _pingo_get "$i"
+    _PINGO_PULL_REASON=
+    _pingo_pull_one "$_PINGO_P"
+    _pingo_pull_report "$_PINGO_NAME"
+    reason=${_PINGO_PULL_REASON:-}
+    key=
+    case "$_PINGO_PULL_RES" in
+      updated) up=$((up + 1)) ;;
+      current) cur=$((cur + 1)) ;;
+      skipped) sk=$((sk + 1)); key=PULL_SUMMARY_SKIPPED ;;
+      *) fl=$((fl + 1)); key=PULL_SUMMARY_FAILED ;;
+    esac
+    if [ -n "$key" ]; then
+      if [ -n "$reason" ]; then
+        _pingo_fmt "$key" "$_PINGO_NAME" "$reason"
+      else
+        _pingo_fmt "${key}_BARE" "$_PINGO_NAME"
+      fi
+      case "$key" in
+        *SKIPPED) notes="$notes  ${_C_YEL}!${_C_R} $_PINGO_M$_PINGO_NL" ;;
+        *) notes="$notes  ${_C_RED}✗${_C_R} $_PINGO_M$_PINGO_NL" ;;
+      esac
+    fi
+    i=$((i + 1))
+  done
+  _pingo_fmt PULL_SUMMARY "$up" "$cur" "$sk" "$fl"
+  printf '\n%s%s%s\n%s' "${_C_B}" "$_PINGO_M" "${_C_R}" "$notes"
+  [ "$fl" -eq 0 ]
+}
+
+# Registered Repository containing the current directory -> $_PINGO_IDX.
+# The deepest match wins. Compares the logical path first and the physical
+# one (pwd -P) as a fallback, so symlinked paths still match.
+_pingo_resolve_here() {
+  local i=1 best=0 bestlen=0 here phys key pkey rkey len
+  _PINGO_IDX=
+  _pingo_normpath "$PWD" || _PINGO_NP=$PWD
+  _pingo_pathkey "$_PINGO_NP"
+  here=$_PINGO_PK
+  phys=$(pwd -P 2>/dev/null) || phys=$PWD
+  _pingo_normpath "$phys" && phys=$_PINGO_NP
+  _pingo_pathkey "$phys"
+  pkey=$_PINGO_PK
+  while [ "$i" -le "$_PINGO_N" ]; do
+    _pingo_get "$i"
+    _pingo_pathkey "$_PINGO_P"
+    rkey=$_PINGO_PK
+    key=$here
+    case "$here/" in
+      "${rkey%/}/"*) ;;
+      *)
+        key=
+        if [ -d "$_PINGO_P" ]; then
+          rkey=$(CDPATH= _pingo_cd_quiet "$_PINGO_P" && pwd -P 2>/dev/null) || rkey=
+          if [ -n "$rkey" ] && _pingo_normpath "$rkey"; then
+            _pingo_pathkey "$_PINGO_NP"
+            rkey=$_PINGO_PK
+            case "$pkey/" in "${rkey%/}/"*) key=$pkey ;; esac
+          fi
+        fi
+        ;;
+    esac
+    if [ -n "$key" ]; then
+      len=${#rkey}
+      if [ "$len" -gt "$bestlen" ]; then
+        best=$i
+        bestlen=$len
+      fi
+    fi
+    i=$((i + 1))
+  done
+  if [ "$best" -gt 0 ]; then
+    _PINGO_IDX=$best
+    return 0
+  fi
+  _pingo_tilde "$PWD"
+  _pingo_fmt ERR_NOT_IN_REPO "$_PINGO_TL"
+  return 1
+}
+
 _pingo_cmd_pull() {
+  if [ $# -eq 0 ]; then
+    _pingo_pull_all
+    return
+  fi
   if [ $# -ne 1 ]; then
-    _pingo_fmt USAGE "pingo pull <n|alias>"
+    _pingo_fmt USAGE "pingo pull [n|alias|.]"
     _pingo_fail "$_PINGO_M"
     return 2
   fi
   _pingo_require_git || return 1
   _pingo_load
-  if ! _pingo_resolve "$1"; then
+  if [ "$1" = . ]; then
+    _pingo_resolve_here
+  else
+    _pingo_resolve "$1"
+  fi || {
     _pingo_fail "$_PINGO_M"
     return 1
-  fi
+  }
   _pingo_get "$_PINGO_IDX"
   _pingo_pull_one "$_PINGO_P"
   _pingo_pull_report "$_PINGO_NAME"
@@ -1146,6 +1246,7 @@ _pingo_cmd_help() {
   _pingo_fmt HELP_CONFIG;  _pingo_help_line "pingo config" "$_PINGO_M"
   _pingo_fmt HELP_LANG;    _pingo_help_line "pingo config lang [code]" "$_PINGO_M"
   _pingo_fmt HELP_PULL;    _pingo_help_line "pingo pull [n|alias]" "$_PINGO_M"
+  _pingo_fmt HELP_PULL_HERE; _pingo_help_line "pingo pull ." "$_PINGO_M"
   _pingo_fmt HELP_UPDATE;  _pingo_help_line "pingo update" "$_PINGO_M"
   _pingo_fmt HELP_HELP;    _pingo_help_line "pingo help" "$_PINGO_M"
   _pingo_fmt HELP_VERSION; _pingo_help_line "pingo --version" "$_PINGO_M"
@@ -1164,6 +1265,8 @@ _pingo_help_keys() {
   _pingo_fmt KEY_REMOVE;   _pingo_help_line "d" "$_PINGO_M"
   _pingo_fmt KEY_MOVE;     _pingo_help_line "m" "$_PINGO_M"
   _pingo_fmt KEY_RENAME;   _pingo_help_line "r" "$_PINGO_M"
+  _pingo_fmt KEY_PULL;     _pingo_help_line "p" "$_PINGO_M"
+  _pingo_fmt KEY_PULL_ALL; _pingo_help_line "P" "$_PINGO_M"
   _pingo_fmt KEY_SETTINGS; _pingo_help_line "s" "$_PINGO_M"
   _pingo_fmt KEY_HELP;     _pingo_help_line "?" "$_PINGO_M"
   _pingo_fmt KEY_QUIT;     _pingo_help_line "q  Esc" "$_PINGO_M"
@@ -1329,6 +1432,8 @@ _pingo_draw() {
     _pingo_fk "a" F_ADD
     _pingo_fk "d" F_REMOVE
     _pingo_fk "m" F_MOVE
+    _pingo_fk "p" F_PULL
+    _pingo_fk "P" F_PULL_ALL
     _pingo_fk "s" F_SETTINGS
     _pingo_fk "?" F_HELP
     _pingo_fk "q" F_QUIT
@@ -1442,6 +1547,78 @@ _pingo_menu_help() {
   _pingo_fmt PRESS_ANY_KEY
   printf '%s\n  %s%s%s%s\n\033[J' "$el" "${_C_D}" "$_PINGO_M" "${_C_R}" "$el"
   _pingo_readkey || return 1
+  return 0
+}
+
+# Sets $msg (dynamic scope) to "git not found" when git is missing.
+_pingo_menu_need_git() {
+  command -v git >/dev/null 2>&1 && return 0
+  _pingo_fmt ERR_NO_GIT
+  msg="${_C_RED}✗${_C_R} $_PINGO_M"
+  return 1
+}
+
+# p: Pull the selected Repository without leaving the menu. The message line
+# shows the indicator, then the result. Uses (dynamic scope) sel msg.
+_pingo_menu_pull() {
+  local name dir reason
+  [ "$_PINGO_N" -gt 0 ] || return 0
+  _pingo_menu_need_git || return 0
+  _pingo_get "$sel"
+  name=$_PINGO_NAME dir=$_PINGO_P
+  _pingo_fmt PULLING "$name"
+  msg="${_C_CYN}•${_C_R} $_PINGO_M"
+  _pingo_draw
+  _PINGO_PULL_REASON=
+  _pingo_pull_one "$dir"
+  reason=${_PINGO_PULL_REASON:-}
+  case "$_PINGO_PULL_RES" in
+    updated)
+      if [ "$_PINGO_PULL_COUNT" = 1 ]; then
+        _pingo_fmt PULL_UPDATED_ONE "$name" "$_PINGO_PULL_BRANCH" "$_PINGO_PULL_OLD" "$_PINGO_PULL_NEW"
+      else
+        _pingo_fmt PULL_UPDATED_MANY "$name" "$_PINGO_PULL_BRANCH" "$_PINGO_PULL_COUNT" "$_PINGO_PULL_OLD" "$_PINGO_PULL_NEW"
+      fi
+      msg="${_C_GRN}✓${_C_R} $_PINGO_M"
+      ;;
+    current)
+      _pingo_fmt PULL_CURRENT "$name" "$_PINGO_PULL_BRANCH"
+      msg="${_C_GRN}✓${_C_R} $_PINGO_M"
+      ;;
+    skipped)
+      if [ -n "$reason" ]; then
+        _pingo_fmt PULL_SUMMARY_SKIPPED "$name" "$reason"
+      else
+        _pingo_fmt PULL_SUMMARY_SKIPPED_BARE "$name"
+      fi
+      msg="${_C_YEL}!${_C_R} $_PINGO_M"
+      ;;
+    *)
+      if [ -n "$reason" ]; then
+        _pingo_fmt PULL_SUMMARY_FAILED "$name" "$reason"
+      else
+        _pingo_fmt PULL_FAILED "$name"
+      fi
+      msg="${_C_RED}✗${_C_R} $_PINGO_M"
+      ;;
+  esac
+}
+
+# P: Pull every Repository outside the alternate screen, with the same output
+# as `pingo pull`, then wait for Enter and come back to the menu.
+_pingo_menu_pull_all() {
+  _pingo_menu_need_git || return 0
+  _pingo_tui_leave
+  printf '\n'
+  _pingo_pull_all
+  _pingo_fmt PRESS_ENTER
+  printf '\n  %s%s%s\n' "${_C_D}" "$_PINGO_M" "${_C_R}"
+  while :; do
+    _pingo_readkey || return 1
+    [ "$_PINGO_KEY" = enter ] && break
+    [ "$_PINGO_KEY" = quit ] && return 1
+  done
+  _pingo_tui_enter
   return 0
 }
 
@@ -1599,6 +1776,8 @@ _pingo_menu() {
             fi
             ;;
           s | S) _pingo_menu_settings || break ;;
+          p) _pingo_menu_pull ;;
+          P) _pingo_menu_pull_all || break ;;
           '?' | h | H) _pingo_menu_help || break ;;
         esac
         ;;
@@ -1672,6 +1851,12 @@ _pingo_completion_names() {
     printf '%s\n' "$_PINGO_NAME"
     i=$((i + 1))
   done
+}
+
+# Words offered after "pingo pull": "." (current Repository) plus names.
+_pingo_completion_pull() {
+  printf '%s\n' .
+  _pingo_completion_names
 }
 
 # --- tab completion -----------------------------------------------------------------
