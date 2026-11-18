@@ -13,7 +13,7 @@
 #  from 0, zsh from 1); lists are kept as newline-separated strings.
 # ---------------------------------------------------------------------------
 
-PINGO_VERSION="0.1.0"
+PINGO_VERSION="0.2.0"
 
 # --- installation directory -------------------------------------------------
 if [ -n "${ZSH_VERSION:-}" ]; then
