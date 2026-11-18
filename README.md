@@ -123,7 +123,7 @@ your startup file. Using pingo feels exactly like using a command.
 | `m`                      | move: pick it up, use `↑` `↓`, drop with Enter |
 | `r`                      | rename (change alias)                          |
 | `p`                      | pull the selected repository                   |
-| `P`                      | pull every repository, then back to the menu   |
+| `P`                      | pull every repository, then back to the menu (Enter, `q` or `Esc`) |
 | `s`                      | settings (language)                            |
 | `?`                      | help                                           |
 | `q` / `Esc`              | quit                                           |
@@ -135,18 +135,21 @@ remote declares as the main line, usually `main` or `master`) up to date with
 its remote. It's always safe to run:
 
 - **Fast-forward only.** pingo never merges, rebases, stashes or creates commits.
-  If your local default branch has commits the remote doesn't, it reports
-  *diverged* and leaves it for you.
+  If your local default branch has commits the remote doesn't (even with
+  nothing new on the remote), it reports *diverged* and leaves it for you.
 - **Never changes your checkout.** On a feature branch (or a detached HEAD), the
   default branch is updated without being checked out; your branch and working
   tree are untouched, even with uncommitted changes. If the default branch *is*
   checked out, it is fast-forwarded in place.
 - **Never changes your directory.** `pingo pull api` doesn't jump to `api`.
-- **Never hangs on a password prompt.** A remote that needs credentials fails
-  instead (SSH keys in an agent keep working).
+- **Never hangs on a prompt.** A remote that needs credentials fails instead.
+  SSH runs with `BatchMode=yes` (no passphrase or host key questions; keys in an
+  agent keep working), unless you set your own `GIT_SSH_COMMAND`, `GIT_SSH` or
+  `core.sshCommand`.
 
 The default branch is the remote's declared HEAD, else a local `main`, else a
-local `master`. The remote is the branch's upstream, else `origin`.
+local `master`; it must exist locally (Pull never creates branches). The
+remote is the branch's upstream, else `origin`.
 
 ```sh
 pingo pull          # every repository, in list order, then a summary

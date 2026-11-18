@@ -124,7 +124,7 @@ usar qualquer comando.
 | `m`                      | mover: pega o item, use `↑` `↓`, solte com Enter |
 | `r`                      | renomear (alterar alias)                         |
 | `p`                      | fazer o pull do repositório selecionado          |
-| `P`                      | fazer o pull de todos e voltar ao menu           |
+| `P`                      | fazer o pull de todos e voltar ao menu (Enter, `q` ou `Esc`) |
 | `s`                      | configurações (idioma)                           |
 | `?`                      | ajuda                                            |
 | `q` / `Esc`              | sair                                             |
@@ -136,18 +136,21 @@ declara como linha principal, normalmente `main` ou `master`) em dia com o
 remoto. Pode rodar sem medo:
 
 - **Só fast-forward.** O pingo nunca faz merge, rebase, stash nem cria commits.
-  Se a sua branch padrão local tem commits que o remoto não tem, ele avisa
-  *divergiu* e deixa a resolução com você.
+  Se a sua branch padrão local tem commits que o remoto não tem (mesmo sem
+  nada novo no remoto), ele avisa *divergiu* e deixa a resolução com você.
 - **Nunca troca o seu checkout.** Numa branch de feature (ou com HEAD destacado),
   a branch padrão é atualizada sem checkout; sua branch e sua árvore de trabalho
   ficam intactas, mesmo com mudanças não commitadas. Se a branch padrão *é* a
   que está em uso, ela avança ali mesmo.
 - **Nunca muda o seu diretório.** `pingo pull api` não leva você até `api`.
-- **Nunca trava pedindo senha.** Um remoto que exige credenciais falha na hora
-  (chaves SSH num agente continuam funcionando).
+- **Nunca trava num prompt.** Um remoto que exige credenciais falha na hora.
+  O SSH roda com `BatchMode=yes` (sem perguntar passphrase nem host key; chaves
+  num agente continuam funcionando), a menos que você defina o seu próprio
+  `GIT_SSH_COMMAND`, `GIT_SSH` ou `core.sshCommand`.
 
 A branch padrão é o HEAD declarado pelo remoto; senão uma `main` local; senão
-uma `master` local. O remoto é o upstream da branch; senão o `origin`.
+uma `master` local; ela precisa existir localmente (o Pull nunca cria
+branches). O remoto é o upstream da branch; senão o `origin`.
 
 ```sh
 pingo pull          # todos os repositórios, na ordem da lista, e um resumo
