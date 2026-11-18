@@ -21,7 +21,7 @@ Pure shell · zero dependencies · zsh & bash · macOS, Linux and Windows (Git B
     4  dotfiles  ~/dotfiles           ⎇ master
     5  old-proj  ~/old/proj           ✗ not found
 
-  ⏎ open   a add   d remove   m move   s settings   ? help   q quit
+  ⏎ open   a add   d remove   m move   p pull   P pull all   s settings   ? help   q quit
 ```
 
 Type `pingo`, pick a repository with the arrow keys, press Enter: you are there.
@@ -32,11 +32,13 @@ Or skip the menu entirely with `pingo api` or `pingo 2`.
 - **Interactive menu** with arrow keys (or `j`/`k`), number jumps and shortcuts to add, remove, reorder and rename.
 - **Direct jumps**: `pingo <alias>`, `pingo <folder-name>` or `pingo <position>`.
 - **Your order**: the list is shown in the order you choose. Reorder with `m` in the menu or `pingo mv`.
+- **Pull**: `pingo pull` brings the default branch of every repository up to date with its remote, fast-forward only, without changing the branch you have checked out (`p`/`P` in the menu).
 - **Current branch** next to each repository, read straight from `.git/HEAD` (instant, even on Windows).
 - **Missing repositories** are flagged in red; `pingo prune` cleans them up.
 - **English and Português (Brasil)**, detected from your system. Add any other language with a single file.
 - **Tab completion** in zsh and bash.
 - **Pure shell**: only bash/zsh builtins. Works on zsh ≥ 5 and bash ≥ 3.2.
+  (`pingo pull` and `pingo update` call `git`, which must be installed.)
 
 ## Install
 
@@ -103,6 +105,9 @@ your startup file. Using pingo feels exactly like using a command.
 | `pingo prune`                    | remove repositories that no longer exist     |
 | `pingo config`                   | show settings and file locations             |
 | `pingo config lang [code]`       | list languages or change the language        |
+| `pingo pull`                     | pull every repository (see [Pull](#pull))    |
+| `pingo pull <n\|alias>`          | pull a single repository                     |
+| `pingo pull .`                   | pull the repository you are in               |
 | `pingo update`                   | update pingo (`git pull` in the install dir) |
 | `pingo help`, `pingo --version`  | help and version                             |
 
@@ -117,9 +122,54 @@ your startup file. Using pingo feels exactly like using a command.
 | `d`                      | remove the selected repository (asks first)    |
 | `m`                      | move: pick it up, use `↑` `↓`, drop with Enter |
 | `r`                      | rename (change alias)                          |
+| `p`                      | pull the selected repository                   |
+| `P`                      | pull every repository, then back to the menu   |
 | `s`                      | settings (language)                            |
 | `?`                      | help                                           |
 | `q` / `Esc`              | quit                                           |
+
+### Pull
+
+`pingo pull` brings the **default branch** of a repository (the branch its
+remote declares as the main line, usually `main` or `master`) up to date with
+its remote. It's always safe to run:
+
+- **Fast-forward only.** pingo never merges, rebases, stashes or creates commits.
+  If your local default branch has commits the remote doesn't, it reports
+  *diverged* and leaves it for you.
+- **Never changes your checkout.** On a feature branch (or a detached HEAD), the
+  default branch is updated without being checked out; your branch and working
+  tree are untouched, even with uncommitted changes. If the default branch *is*
+  checked out, it is fast-forwarded in place.
+- **Never changes your directory.** `pingo pull api` doesn't jump to `api`.
+- **Never hangs on a password prompt.** A remote that needs credentials fails
+  instead (SSH keys in an agent keep working).
+
+The default branch is the remote's declared HEAD, else a local `main`, else a
+local `master`. The remote is the branch's upstream, else `origin`.
+
+```sh
+pingo pull          # every repository, in list order, then a summary
+pingo pull api      # a single repository, by alias, folder name or position
+pingo api && pingo pull .   # the registered repository you are in (any subdirectory)
+```
+
+Each repository gets one line: *updated* (with the number of commits and the
+old → new hashes), *already up to date*, *skipped* or *failed*, with the reason:
+
+| Skipped (nothing was touched)                           | Failed (git refused or errored) |
+|---------------------------------------------------------|---------------------------------|
+| directory not found                                     | diverged                        |
+| not a git repository                                    | remote unreachable              |
+| no remote                                               | authentication required         |
+| no default branch found                                 | git error                       |
+| uncommitted changes (on the checked-out default branch) |                                 |
+| merge / rebase in progress                              |                                 |
+| default branch checked out in another worktree          |                                 |
+
+Untracked files never cause a skip. `pingo pull` exits `1` only if a repository
+failed (skips are expected states); `pingo pull <n|alias|.>` exits `1` if that
+repository failed **or** was skipped.
 
 ### Aliases and paths
 
