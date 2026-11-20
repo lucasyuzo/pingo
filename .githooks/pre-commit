@@ -1,0 +1,8 @@
+#!/bin/sh
+# main only receives merges (see docs/agents/workflow.md).
+branch=$(git symbolic-ref --short -q HEAD) || exit 0
+[ "$branch" = main ] || exit 0
+git rev-parse -q --verify MERGE_HEAD >/dev/null && exit 0
+printf 'pre-commit: direct commits on main are not allowed; commit on a branch and merge it with --no-ff\n' >&2
+printf '  see docs/agents/workflow.md\n' >&2
+exit 1

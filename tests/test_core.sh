@@ -153,6 +153,17 @@ assert_contains "$out" "No repositories yet" "empty list hint"
 
 # --- help & version ---
 assert_contains "$(pingo help)" "pingo add <path> [alias]" "help lists commands"
-assert_eq "$(pingo --version)" "pingo 0.2.0" "version is 0.2.0"
+# The version pingo reports must match the latest CHANGELOG entry.
+changelog_version=
+while IFS= read -r line; do
+  case "$line" in
+    "## ["[0-9]*)
+      changelog_version=${line#'## ['}
+      changelog_version=${changelog_version%%']'*}
+      break
+      ;;
+  esac
+done <"$T_ROOT/CHANGELOG.md"
+assert_eq "$(pingo --version)" "pingo $changelog_version" "version matches the latest CHANGELOG entry"
 
 t_done
