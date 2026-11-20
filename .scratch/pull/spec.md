@@ -1,6 +1,6 @@
 # Spec: Pull the Default branch of registered Repositories
 
-Status: done
+**Status:** done
 
 ## Problem Statement
 
