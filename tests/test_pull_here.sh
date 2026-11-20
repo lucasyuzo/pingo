@@ -44,11 +44,17 @@ out=$(cd "$T_TMP/work/mono/packages" && pingo pull . 2>&1)
 assert_contains "$out" "mono: main updated, 1 commit" "nested: outside the inner one, the outer Repository is pulled"
 
 # --- through a symlink to a registered Repository ---
-ln -s "$T_TMP/work/api" "$T_TMP/link-api"
-t_git_advance "$T_TMP/work/api" 1
-out=$(cd "$T_TMP/link-api/src" && pingo pull . 2>&1); st=$?
-assert_status $st 0 "symlinked path: pull . succeeds"
-assert_contains "$out" "api: main updated, 1 commit" "symlinked path resolves to the registered Repository"
+# Git Bash's `ln -s` copies the directory unless real symlinks are enabled,
+# so this case only runs where a real symlink was created.
+ln -s "$T_TMP/work/api" "$T_TMP/link-api" 2>/dev/null
+if [ -L "$T_TMP/link-api" ]; then
+  t_git_advance "$T_TMP/work/api" 1
+  out=$(cd "$T_TMP/link-api/src" && pingo pull . 2>&1); st=$?
+  assert_status $st 0 "symlinked path: pull . succeeds"
+  assert_contains "$out" "api: main updated, 1 commit" "symlinked path resolves to the registered Repository"
+else
+  printf '  skip: symlinked path (ln -s did not create a symlink)\n'
+fi
 
 # --- outside any registered Repository ---
 mkdir -p "$T_TMP/elsewhere"
