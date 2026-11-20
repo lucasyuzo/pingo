@@ -1,0 +1,21 @@
+#!/bin/sh
+# Commit subjects follow Conventional Commits (see docs/agents/workflow.md).
+subject=
+while IFS= read -r line || [ -n "$line" ]; do
+  case "$line" in
+    '#'*) continue ;;
+  esac
+  subject=$line
+  break
+done <"$1"
+
+case "$subject" in
+  'Merge '* | 'Revert '* | 'fixup! '* | 'squash! '* | 'amend! '*) exit 0 ;;
+esac
+if printf '%s\n' "$subject" | grep -Eq '^(feat|fix|refactor|test|docs|chore)(\([a-z0-9._/-]+\))?: [^ ]'; then
+  exit 0
+fi
+printf 'commit-msg: invalid subject: "%s"\n' "$subject" >&2
+printf '  expected <type>[(scope)]: <description>, type in feat fix refactor test docs chore\n' >&2
+printf '  see docs/agents/workflow.md\n' >&2
+exit 1
